@@ -1,0 +1,48 @@
+# Local dev overrides — used when running with --spring.profiles.active=local
+spring:
+  config:
+    import: optional:file:./application-secrets.yml
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+          # Fail fast (and avoid long OS-level hangs) on local dev networks.
+          connectiontimeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_CONNECTIONTIMEOUT:8000}
+          timeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_TIMEOUT:8000}
+          writetimeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_WRITETIMEOUT:8000}
+
+  jpa:
+    show-sql: true
+  flyway:
+    baseline-on-migrate: true
+
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8081}
+  # If Gmail/app-password fails (535 BadCredentials), registration still completes and the
+  # OTP is printed in the backend log. Set to false when SMTP is production-ready.
+  email:
+    log-code-on-send-failure: ${APP_EMAIL_LOG_CODE_ON_SEND_FAILURE:true}
+  jwt:
+    secret: ${APP_JWT_SECRET:}
+    issuer: ${APP_JWT_ISSUER:loyaltyos-tenant-onboarding}
+    access-ttl-minutes: ${APP_JWT_ACCESS_TTL_MINUTES:60}
+
+logging:
+  level:
+    com.loyaltyos: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+

@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: tenant-onboarding-service
+
+  threads:
+    virtual:
+      enabled: true
+
+  # JPA — do NOT auto-create schema, Flyway manages this
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          time_zone: UTC
+
+  # Flyway — migrations in db/migration
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # Datasource — values come from environment variables
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+      pool-name: onboarding-pool
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  # Kafka
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: "true"
+        max.in.flight.requests.per.connection: "5"
+
+  # Security — disable default user for now, we configure this properly later
+  security:
+    user:
+      name: disable
+      password: disable
+
+server:
+  port: 8080
+
+# App-level policies
+app:
+  onboarding:
+    # Unverified registrations expire after this many hours.
+    # Used both at request-time and by the scheduled cleanup job.
+    pending-expiry-hours: ${APP_ONBOARDING_PENDING_EXPIRY_HOURS:24}
+    cleanup:
+      fixed-delay-ms: ${APP_ONBOARDING_CLEANUP_FIXED_DELAY_MS:3600000}
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# SpringDoc OpenAPI
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
