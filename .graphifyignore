@@ -1,0 +1,8 @@
+target/
+build/
+.gradle/
+*.class
+*.jar
+.vscode/
+.settings/
+application-secrets.yml

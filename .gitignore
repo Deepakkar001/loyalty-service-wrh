@@ -1,6 +1,9 @@
 .gradle/
 build/
 .idea/
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/cost.json
 *.iml
 *.iws
 .DS_Store
