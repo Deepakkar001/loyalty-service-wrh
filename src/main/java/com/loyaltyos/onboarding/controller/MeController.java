@@ -10,7 +10,7 @@ import com.loyaltyos.onboarding.service.TenantRegistrationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,12 +23,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/me")
-@RequiredArgsConstructor
 @Tag(name = "Me", description = "Tenant-scoped endpoints (JWT required)")
 public class MeController {
 
     private final TenantRegistrationService registrationService;
     private final TenantAgreementService agreementService;
+
+    public MeController(TenantRegistrationService registrationService, TenantAgreementService agreementService) {
+        this.registrationService = Objects.requireNonNull(registrationService, "registrationService");
+        this.agreementService = Objects.requireNonNull(agreementService, "agreementService");
+    }
 
     @GetMapping("/status")
     @Operation(summary = "Get my tenant onboarding status",

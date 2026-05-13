@@ -1,13 +1,9 @@
 package com.loyaltyos.onboarding.domain.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
 
 @Entity
 @Table(name = "ref_settlement_frequency")
-@Getter
-@Setter
 public class RefSettlementFrequency {
     @Id
     @Column(name = "code", length = 20, nullable = false, updatable = false)
@@ -21,4 +17,39 @@ public class RefSettlementFrequency {
 
     @Column(name = "is_active", nullable = false)
     private Boolean active;
+
+    /** JPA requires a no-arg constructor. */
+    public RefSettlementFrequency() {}
+
+    public String getCode() {
+        return code;
+    }
+
+    public void setCode(String code) {
+        this.code = code;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public Integer getSortOrder() {
+        return sortOrder;
+    }
+
+    public void setSortOrder(Integer sortOrder) {
+        this.sortOrder = sortOrder;
+    }
+
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
+    }
 }

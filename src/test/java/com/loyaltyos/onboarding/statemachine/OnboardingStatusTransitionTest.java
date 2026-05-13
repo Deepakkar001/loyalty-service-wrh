@@ -14,7 +14,8 @@ class OnboardingStatusTransitionTest {
         assertThat(EMAIL_VERIFIED.canTransitionTo(AGREEMENT_PENDING)).isTrue();
         assertThat(AGREEMENT_PENDING.canTransitionTo(AGREEMENT_SIGNED)).isTrue();
         assertThat(AGREEMENT_SIGNED.canTransitionTo(CONFIGURED)).isTrue();
-        assertThat(CONFIGURED.canTransitionTo(SANDBOX_TESTING)).isTrue();
+        assertThat(CONFIGURED.canTransitionTo(RULES_CONFIGURED)).isTrue();
+        assertThat(RULES_CONFIGURED.canTransitionTo(SANDBOX_TESTING)).isTrue();
         assertThat(SANDBOX_TESTING.canTransitionTo(ACTIVE)).isTrue();
         assertThat(ACTIVE.canTransitionTo(SUSPENDED)).isTrue();
         assertThat(ACTIVE.canTransitionTo(TERMINATED)).isTrue();

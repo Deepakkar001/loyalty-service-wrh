@@ -1,7 +1,5 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.TenantAgreement;
 import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
 import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
@@ -14,16 +12,16 @@ import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantContactRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AdminDashboardService {
 
@@ -31,6 +29,18 @@ public class AdminDashboardService {
     private final TenantAgreementRepository agreementRepository;
     private final TenantContactRepository contactRepository;
     private final OnboardingAuditLogRepository auditLogRepository;
+
+    public AdminDashboardService(
+        TenantOnboardingRepository tenantRepository,
+        TenantAgreementRepository agreementRepository,
+        TenantContactRepository contactRepository,
+        OnboardingAuditLogRepository auditLogRepository
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+        this.contactRepository = Objects.requireNonNull(contactRepository, "contactRepository");
+        this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
+    }
 
     public AdminDashboardStats getStats() {
         long total = tenantRepository.count();
@@ -92,6 +102,28 @@ public class AdminDashboardService {
         TenantOnboarding tenant = tenantRepository.findByTenantId(tenantId)
                 .orElseThrow(() -> new TenantNotFoundException(tenantId));
 
+        Map<String, String> approvalNotesByAgreementUid = new java.util.HashMap<>();
+        for (var l : auditLogRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, PageRequest.of(0, 200)).getContent()) {
+            if (!"AGREEMENT_APPROVED".equals(l.getAction())) {
+                continue;
+            }
+            var after = l.getAfterState();
+            if (after == null) {
+                continue;
+            }
+            Object au = after.get("agreementUid");
+            if (au == null) {
+                continue;
+            }
+            String uid = String.valueOf(au).trim();
+            if (uid.isBlank() || approvalNotesByAgreementUid.containsKey(uid)) {
+                continue; // keep newest (first due to ordering)
+            }
+            Object an = after.get("approvalNotes");
+            String notes = an == null ? null : String.valueOf(an).trim();
+            approvalNotesByAgreementUid.put(uid, (notes == null || notes.isBlank()) ? null : notes);
+        }
+
         var contacts = contactRepository.findByTenantId(tenantId).stream()
                 .map(c -> AdminTenantDetail.TenantContactItem.builder()
                         .contactName(c.getName())
@@ -117,6 +149,7 @@ public class AdminDashboardService {
                         .approvedByAdminId(a.getApprovedByAdminId())
                         .approvedAt(a.getApprovedAt())
                         .rejectionReason(a.getRejectionReason())
+                        .approvalNotes(approvalNotesByAgreementUid.get(a.getAgreementUid()))
                         .createdAt(a.getCreatedAt())
                         .build())
                 .toList();

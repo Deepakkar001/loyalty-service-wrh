@@ -1,19 +1,22 @@
 package com.loyaltyos.onboarding.service;
 
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Service
-@RequiredArgsConstructor
 public class SlugGenerationService {
 
     private final TenantOnboardingRepository tenantRepository;
     private static final Pattern NON_ALPHANUMERIC = Pattern.compile("[^a-z0-9]+");
     private static final int MAX_SLUG_LENGTH = 90;
+
+    public SlugGenerationService(TenantOnboardingRepository tenantRepository) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+    }
 
     public String generateUniqueSlug(String companyName) {
         String baseSlug = toSlug(companyName);

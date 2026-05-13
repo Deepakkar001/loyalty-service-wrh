@@ -2,6 +2,12 @@ spring:
   application:
     name: tenant-onboarding-service
 
+  # Always import local-only secrets if present.
+  # This avoids requiring manual env var exports for SMTP/JWT in dev.
+  # File is optional and should remain git-ignored.
+  config:
+    import: optional:file:./application-secrets.yml
+
   threads:
     virtual:
       enabled: true
@@ -28,7 +34,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:}
+    password: ${DB_PASSWORD:deepak9153}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 50
@@ -45,17 +51,17 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
-  # Kafka
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      acks: all
-      retries: 3
-      properties:
-        enable.idempotence: "true"
-        max.in.flight.requests.per.connection: "5"
+  # --- Kafka (commented out until we scale / need downstream consumers) ---
+  # kafka:
+  #   bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+  #   producer:
+  #     key-serializer: org.apache.kafka.common.serialization.StringSerializer
+  #     value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  #     acks: all
+  #     retries: 3
+  #     properties:
+  #       enable.idempotence: "true"
+  #       max.in.flight.requests.per.connection: "5"
 
   # Security — disable default user for now, we configure this properly later
   security:
@@ -63,8 +69,33 @@ spring:
       name: disable
       password: disable
 
+  # Mail (host/port defaults; username/password can come from application-secrets.yml)
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 server:
-  port: 8080
+  port: 8081
+
+loyalty:
+  rules:
+    cache-enabled: ${LOYALTY_RULES_CACHE_ENABLED:true}
+    cache-ttl-seconds: ${LOYALTY_RULES_CACHE_TTL_SECONDS:300}
+    max-condition-depth: ${LOYALTY_RULES_MAX_CONDITION_DEPTH:32}
+    evaluation-timeout-ms: ${LOYALTY_RULES_EVAL_TIMEOUT_MS:5000}
+    caps-redis-enabled: ${LOYALTY_RULES_CAPS_REDIS_ENABLED:false}
 
 # App-level policies
 app:

@@ -4,11 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
 
-@Getter
-@Setter
 public class VerifyEmailCodeRequest {
 
     @NotBlank(message = "Email is required")
@@ -25,5 +21,14 @@ public class VerifyEmailCodeRequest {
      */
     @Size(min = 12, max = 100, message = "Password must be at least 12 characters")
     private String newPassword;
+
+    public VerifyEmailCodeRequest() {}
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
+    public String getNewPassword() { return newPassword; }
+    public void setNewPassword(String newPassword) { this.newPassword = newPassword; }
 }
 

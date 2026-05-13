@@ -3,7 +3,6 @@ package com.loyaltyos.onboarding.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.onboarding.security.JwtProperties;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,10 +11,10 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class RefreshTokenService {
 
     private static final String PREFIX = "rt:";
@@ -25,6 +24,12 @@ public class RefreshTokenService {
     private final ObjectMapper objectMapper;
     private final JwtProperties jwtProperties;
 
+    public RefreshTokenService(StringRedisTemplate redis, ObjectMapper objectMapper, JwtProperties jwtProperties) {
+        this.redis = Objects.requireNonNull(redis, "redis");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
+    }
+
     public record RefreshPrincipal(String tenantId, String email, String role) {}
 
     public String issue(RefreshPrincipal principal) {
@@ -33,7 +38,11 @@ public class RefreshTokenService {
         String key = PREFIX + hash;
         Duration ttl = Duration.ofDays(jwtProperties.getRefreshTtlDays());
         try {
-            redis.opsForValue().set(key, objectMapper.writeValueAsString(principal), ttl);
+            redis.opsForValue().set(
+                Objects.requireNonNull(key, "key"),
+                Objects.requireNonNull(objectMapper.writeValueAsString(principal), "json"),
+                Objects.requireNonNull(ttl, "ttl")
+            );
         } catch (JsonProcessingException e) {
             // Best-effort: if JSON fails, do not issue a refresh token.
             throw new IllegalStateException("Failed to issue refresh token", e);
@@ -45,7 +54,7 @@ public class RefreshTokenService {
         if (rawToken == null || rawToken.isBlank()) return Optional.empty();
         String hash = sha256Hex(rawToken);
         String key = PREFIX + hash;
-        String json = redis.opsForValue().get(key);
+        String json = redis.opsForValue().get(Objects.requireNonNull(key, "key"));
         if (json == null || json.isBlank()) return Optional.empty();
 
         // Rotation: delete old token immediately, caller must set a new cookie.

@@ -5,18 +5,23 @@ import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.exception.InvalidStatusTransitionException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class OnboardingStateMachine {
 
+    private static final Logger log = LoggerFactory.getLogger(OnboardingStateMachine.class);
+
     private final OnboardingAuditLogRepository auditLogRepository;
+
+    public OnboardingStateMachine(OnboardingAuditLogRepository auditLogRepository) {
+        this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
+    }
 
     /**
      * Enforces the 6-stage tenant onboarding state machine.
@@ -40,14 +45,15 @@ public class OnboardingStateMachine {
         log.info("Tenant [{}] onboarding status: {} → {}", tenant.getTenantId(), current, next);
 
         // Record audit BEFORE applying change
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
             .tenantId(tenant.getTenantId())
             .action("STATUS_TRANSITION")
             .actorId(actorId)
             .actorRole(actorRole)
             .beforeState(Map.of("onboardingStatus", current.name()))
             .afterState(Map.of("onboardingStatus", next.name()))
-            .build());
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
 
         // Apply transition
         tenant.setOnboardingStatus(next);

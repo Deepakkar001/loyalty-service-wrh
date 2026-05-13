@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
+
+  <!--
+    Keep logs readable in STS while still searchable.
+    traceId/tenantId come from MDC in CorrelationIdFilter.
+  -->
+  <property name="CONSOLE_LOG_PATTERN"
+            value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{traceId:-no-trace} %X{tenantId:-no-tenant}] [%thread] %logger{36} : %msg%n"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE" />
+  </root>
+
+  <!-- Keep our request logs visible -->
+  <logger name="com.loyaltyos.onboarding.logging" level="INFO" additivity="false">
+    <appender-ref ref="CONSOLE" />
+  </logger>
+</configuration>
+

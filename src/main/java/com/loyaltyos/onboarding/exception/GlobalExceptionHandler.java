@@ -1,6 +1,7 @@
 package com.loyaltyos.onboarding.exception;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +17,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
-@Slf4j
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(TenantNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTenantNotFound(
@@ -49,13 +51,26 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION", ex.getMessage(), request);
     }
 
-    @ExceptionHandler(KafkaProvisioningException.class)
-    public ResponseEntity<ErrorResponse> handleKafkaProvisioning(
-            KafkaProvisioningException ex, WebRequest request) {
-        log.error("Kafka provisioning failed: {}", ex.getMessage(), ex);
-        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "KAFKA_PROVISIONING_FAILED",
-                "Infrastructure provisioning failed. Please try again.", request);
+    @ExceptionHandler(InvalidStateException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidState(
+            InvalidStateException ex, WebRequest request) {
+        String msg = ex.getMessage();
+        if (ex.getCurrentStatus() != null || ex.getRequiredStatus() != null) {
+            msg = (msg == null ? "Invalid state" : msg)
+                + " (currentStatus=" + ex.getCurrentStatus()
+                + ", requiredStatus=" + ex.getRequiredStatus() + ")";
+        }
+        return buildResponse(HttpStatus.CONFLICT, "INVALID_STATE", msg, request);
     }
+
+    // --- Kafka (disabled): reinstate when KafkaProvisioningException is thrown again ---
+    // @ExceptionHandler(KafkaProvisioningException.class)
+    // public ResponseEntity<ErrorResponse> handleKafkaProvisioning(
+    //         KafkaProvisioningException ex, WebRequest request) {
+    //     log.error("Kafka provisioning failed: {}", ex.getMessage(), ex);
+    //     return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "KAFKA_PROVISIONING_FAILED",
+    //             "Infrastructure provisioning failed. Please try again.", request);
+    // }
 
     @ExceptionHandler(InvalidVerificationCodeException.class)
     public ResponseEntity<ErrorResponse> handleInvalidVerificationCode(
@@ -75,6 +90,24 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_STATE", ex.getMessage(), request);
     }
 
+    /**
+     * Map programmatic argument errors to a clean 400 with the actual message preserved
+     * (instead of letting them fall through to the catch-all 500 with "An unexpected error
+     * occurred"). Common sources: "Unknown business category: X", missing required reason, etc.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex, WebRequest request) {
+        String msg = ex.getMessage();
+        boolean looksLikeNotFound = msg != null
+                && (msg.toLowerCase().startsWith("unknown ")
+                        || msg.toLowerCase().contains(" not found"));
+        if (looksLikeNotFound) {
+            return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", msg, request);
+        }
+        return buildResponse(HttpStatus.BAD_REQUEST, "BAD_REQUEST", msg, request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationErrors(
             MethodArgumentNotValidException ex, WebRequest request) {
@@ -84,11 +117,23 @@ public class GlobalExceptionHandler {
             fieldErrors.put(fieldName, error.getDefaultMessage());
         });
         ErrorResponse response = new ErrorResponse(
-            Instant.now(), HttpStatus.BAD_REQUEST.value(),
+            Instant.now(), HttpStatus.UNPROCESSABLE_ENTITY.value(),
             "VALIDATION_FAILED", "Request validation failed",
             request.getDescription(false), extractTraceId(request), fieldErrors
         );
-        return ResponseEntity.badRequest().body(response);
+        return ResponseEntity.unprocessableEntity().body(response);
+    }
+
+    @ExceptionHandler(ProgrammeConfigValidationException.class)
+    public ResponseEntity<ErrorResponse> handleProgrammeConfigValidation(
+            ProgrammeConfigValidationException ex, WebRequest request) {
+        ErrorResponse response = new ErrorResponse(
+            Instant.now(), HttpStatus.UNPROCESSABLE_ENTITY.value(),
+            "VALIDATION_FAILED", ex.getMessage(),
+            request.getDescription(false), extractTraceId(request),
+            ex.getFieldErrors()
+        );
+        return ResponseEntity.unprocessableEntity().body(response);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

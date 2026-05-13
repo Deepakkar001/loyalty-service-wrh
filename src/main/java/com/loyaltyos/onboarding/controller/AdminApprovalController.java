@@ -8,7 +8,7 @@ import com.loyaltyos.onboarding.service.AgreementApprovalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -18,11 +18,14 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/admin/agreements")
-@RequiredArgsConstructor
 @Tag(name = "Admin Approval", description = "Maker-checker agreement approval workflow")
 public class AdminApprovalController {
 
     private final AgreementApprovalService approvalService;
+
+    public AdminApprovalController(AgreementApprovalService approvalService) {
+        this.approvalService = Objects.requireNonNull(approvalService, "approvalService");
+    }
 
     @GetMapping("/pending")
     @Operation(summary = "List pending agreements", description = "Returns all agreements awaiting admin approval")
@@ -33,7 +36,7 @@ public class AdminApprovalController {
     @PostMapping("/{agreementUid}/approve")
     @Operation(summary = "Approve agreement", description = "Approves a pending agreement (maker-checker enforced)")
     public ResponseEntity<Void> approve(
-            @PathVariable String agreementUid,
+            @PathVariable("agreementUid") String agreementUid,
             @RequestBody(required = false) ApproveAgreementRequest request,
             @AuthenticationPrincipal Jwt jwt) {
 
@@ -48,7 +51,7 @@ public class AdminApprovalController {
     @PostMapping("/{agreementUid}/reject")
     @Operation(summary = "Reject agreement", description = "Rejects a pending agreement with reason (maker-checker enforced)")
     public ResponseEntity<Void> reject(
-            @PathVariable String agreementUid,
+            @PathVariable("agreementUid") String agreementUid,
             @Valid @RequestBody RejectAgreementRequest request,
             @AuthenticationPrincipal Jwt jwt) {
 

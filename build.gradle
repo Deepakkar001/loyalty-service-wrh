@@ -45,8 +45,11 @@ dependencies {
     // Actuator (health checks, metrics)
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
-    // Kafka
-    implementation 'org.springframework.kafka:spring-kafka'
+    // Kafka (disabled — uncomment when re-enabling; pair with application.yml + KafkaConfig.java)
+    // implementation 'org.springframework.kafka:spring-kafka'
+
+    // JSON Schema validation (programme config)
+    implementation 'com.networknt:json-schema-validator:1.5.6'
 
     // Email (SMTP)
     implementation 'org.springframework.boot:spring-boot-starter-mail'
@@ -71,10 +74,21 @@ dependencies {
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    // Gradle 9 + Spring Boot: ensure JUnit Platform launcher on test runtime classpath
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // testImplementation 'org.springframework.kafka:spring-kafka-test'
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:mysql'
-    testImplementation 'org.testcontainers:kafka'
+    // testImplementation 'org.testcontainers:kafka'
+
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
 }
 
 dependencyManagement {
@@ -85,6 +99,10 @@ dependencyManagement {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ["-parameters"]
 }
 
 // Local dev: some networks resolve smtp.gmail.com to IPv6 first, which can hang/fail.

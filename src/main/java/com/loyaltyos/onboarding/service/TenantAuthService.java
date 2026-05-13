@@ -7,7 +7,6 @@ import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.security.JwtProperties;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -17,9 +16,9 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
 public class TenantAuthService {
 
     private final TenantOnboardingRepository tenantRepository;
@@ -28,6 +27,22 @@ public class TenantAuthService {
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
     private final RefreshTokenService refreshTokenService;
+
+    public TenantAuthService(
+        TenantOnboardingRepository tenantRepository,
+        TenantAgreementRepository agreementRepository,
+        PasswordEncoder passwordEncoder,
+        JwtEncoder jwtEncoder,
+        JwtProperties jwtProperties,
+        RefreshTokenService refreshTokenService
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+        this.passwordEncoder = Objects.requireNonNull(passwordEncoder, "passwordEncoder");
+        this.jwtEncoder = Objects.requireNonNull(jwtEncoder, "jwtEncoder");
+        this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
+        this.refreshTokenService = Objects.requireNonNull(refreshTokenService, "refreshTokenService");
+    }
 
     public record AuthResult(LoginResponse response, String refreshToken) {}
 

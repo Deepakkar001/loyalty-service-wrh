@@ -5,6 +5,7 @@ import com.loyaltyos.onboarding.domain.entity.RefBusinessCategory;
 import com.loyaltyos.onboarding.domain.entity.TenantContact;
 import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.domain.enums.AnnualRevenueRange;
+import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
 import com.loyaltyos.onboarding.domain.enums.BusinessModel;
 import com.loyaltyos.onboarding.domain.enums.ContactRole;
 import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
@@ -25,8 +26,9 @@ import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantContactRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -42,10 +44,10 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 @SuppressWarnings("null")
 public class TenantRegistrationService {
+
+    private static final Logger log = LoggerFactory.getLogger(TenantRegistrationService.class);
 
     private final TenantOnboardingRepository tenantRepository;
     private final TenantContactRepository contactRepository;
@@ -72,6 +74,32 @@ public class TenantRegistrationService {
 
     @org.springframework.beans.factory.annotation.Value("${app.onboarding.pending-expiry-hours:24}")
     private long pendingExpiryHours;
+
+    public TenantRegistrationService(
+        TenantOnboardingRepository tenantRepository,
+        TenantContactRepository contactRepository,
+        TenantAgreementRepository agreementRepository,
+        OnboardingAuditLogRepository auditLogRepository,
+        RefBusinessCategoryRepository businessCategoryRepository,
+        OnboardingStateMachine stateMachine,
+        PasswordEncoder passwordEncoder,
+        SlugGenerationService slugGenerationService,
+        EmailVerificationMailer emailVerificationMailer,
+        StringRedisTemplate redis,
+        OnboardingDeletionService deletionService
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.contactRepository = Objects.requireNonNull(contactRepository, "contactRepository");
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+        this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
+        this.businessCategoryRepository = Objects.requireNonNull(businessCategoryRepository, "businessCategoryRepository");
+        this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
+        this.passwordEncoder = Objects.requireNonNull(passwordEncoder, "passwordEncoder");
+        this.slugGenerationService = Objects.requireNonNull(slugGenerationService, "slugGenerationService");
+        this.emailVerificationMailer = Objects.requireNonNull(emailVerificationMailer, "emailVerificationMailer");
+        this.redis = Objects.requireNonNull(redis, "redis");
+        this.deletionService = Objects.requireNonNull(deletionService, "deletionService");
+    }
 
     @Transactional
     public TenantRegistrationResponse register(RegisterTenantRequest request, String clientIp) {
@@ -124,13 +152,14 @@ public class TenantRegistrationService {
 
                 tenantRepository.save(existing);
 
-                auditLogRepository.save(OnboardingAuditLog.builder()
+                OnboardingAuditLog audit = OnboardingAuditLog.builder()
                     .tenantId(existing.getTenantId())
                     .action("REGISTRATION_RESUMED_OTP_SENT")
                     .actorRole("SELF")
                     .actorId(existing.getTenantId())
                     .afterState(Map.of("email", normalizedEmail))
-                    .build());
+                    .build();
+                auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
 
                 enforceOtpLimits(normalizedEmail, clientIp);
                 emailVerificationMailer.sendVerificationCodeEmail(normalizedEmail, code);
@@ -154,7 +183,7 @@ public class TenantRegistrationService {
         String passwordHash = passwordEncoder.encode(request.getPassword());
 
         String resolvedCategory = resolveBusinessCategory(
-                request.getBusinessCategory(), request.getCustomBusinessCategory());
+                request.getBusinessCategory(), request.getCustomBusinessCategory(), tenantId);
 
         BusinessModel bm = null;
         if (request.getBusinessModel() != null && !request.getBusinessModel().isBlank()) {
@@ -220,7 +249,7 @@ public class TenantRegistrationService {
             .build());
 
         // Audit log for registration
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
             .tenantId(saved.getTenantId())
             .action("TENANT_REGISTERED")
             .actorRole("SELF")
@@ -232,7 +261,8 @@ public class TenantRegistrationService {
                 "dataResidencyRegion", request.getDataResidencyRegion().name(),
                 "slug", slug
             ))
-            .build());
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
 
         enforceOtpLimits(normalizedEmail, clientIp);
         emailVerificationMailer.sendVerificationCodeEmail(normalizedEmail, verificationCode);
@@ -296,13 +326,14 @@ public class TenantRegistrationService {
 
         tenantRepository.save(tenant);
 
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
             .tenantId(tenant.getTenantId())
             .action("EMAIL_VERIFICATION_RESENT")
             .actorId(tenant.getTenantId())
             .actorRole("TENANT")
             .afterState(Map.of("email", normalizedEmail))
-            .build());
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
 
         enforceOtpLimits(normalizedEmail, clientIp);
         emailVerificationMailer.sendVerificationCodeEmail(normalizedEmail, code);
@@ -394,7 +425,7 @@ public class TenantRegistrationService {
         tenant.setDataResidencyRegion(request.getDataResidencyRegion());
         tenantRepository.save(tenant);
 
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
             .tenantId(tenantId)
             .action("IDENTITY_UPDATED")
             .actorId(tenantId)
@@ -403,7 +434,8 @@ public class TenantRegistrationService {
                 "identityMode", request.getIdentityMode().name(),
                 "dataResidencyRegion", request.getDataResidencyRegion().name()
             ))
-            .build());
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
     }
 
     @Transactional(readOnly = true)
@@ -414,8 +446,25 @@ public class TenantRegistrationService {
         var latestAgreement = agreementRepository.findTopByTenantIdOrderByCreatedAtDesc(tenantId)
             .orElse(null);
 
+        String approvalNotes = null;
+        if (latestAgreement != null && latestAgreement.getStatus() == com.loyaltyos.onboarding.domain.enums.AgreementStatus.APPROVED) {
+            approvalNotes = auditLogRepository
+                .findTopByTenantIdAndActionOrderByCreatedAtDesc(tenantId, "AGREEMENT_APPROVED")
+                .map(OnboardingAuditLog::getAfterState)
+                .map(m -> m == null ? null : m.get("approvalNotes"))
+                .map(v -> v == null ? null : String.valueOf(v).trim())
+                .filter(s -> s != null && !s.isBlank())
+                .orElse(null);
+        }
+
         var primaryContact = contactRepository.findByTenantIdAndRole(tenantId, ContactRole.PRIMARY_ADMIN)
             .orElse(null);
+
+        // Surface the moderation state of the tenant's resolved business category so the UI
+        // can render an "awaiting review" / "rejected" hint without breaking the dropdown.
+        RefBusinessCategory category = tenant.getBusinessCategory() != null
+                ? businessCategoryRepository.findById(tenant.getBusinessCategory()).orElse(null)
+                : null;
 
         return TenantStatusResponse.builder()
             .tenantId(tenant.getTenantId())
@@ -429,9 +478,14 @@ public class TenantRegistrationService {
             .emailVerified(tenant.getEmailVerified())
             .latestAgreementStatus(latestAgreement != null ? latestAgreement.getStatus() : null)
             .rejectionReason(latestAgreement != null ? latestAgreement.getRejectionReason() : null)
+            .approvalNotes(approvalNotes)
             .createdAt(tenant.getCreatedAt())
             .activatedAt(tenant.getActivatedAt())
             .businessCategory(tenant.getBusinessCategory())
+            .businessCategoryLabel(category != null ? category.getLabel() : null)
+            .businessCategoryStatus(category != null && category.getStatus() != null
+                    ? category.getStatus().name() : null)
+            .businessCategoryDecisionReason(category != null ? category.getDecisionReason() : null)
             .countryCode(tenant.getCountryCode())
             .websiteUrl(tenant.getWebsiteUrl())
             .timezone(tenant.getTimezone())
@@ -464,7 +518,7 @@ public class TenantRegistrationService {
         }
 
         String resolvedCategory = resolveBusinessCategory(
-                request.getBusinessCategory(), request.getCustomBusinessCategory());
+                request.getBusinessCategory(), request.getCustomBusinessCategory(), tenantId);
 
         BusinessModel bm = null;
         if (request.getBusinessModel() != null && !request.getBusinessModel().isBlank()) {
@@ -503,7 +557,7 @@ public class TenantRegistrationService {
                 contactRepository.save(contact);
             });
 
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
             .tenantId(tenantId)
             .action("PROFILE_UPDATED")
             .actorId(tenantId)
@@ -513,38 +567,60 @@ public class TenantRegistrationService {
                 "businessCategory", resolvedCategory,
                 "countryCode", request.getCountryCode()
             ))
-            .build());
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
     }
 
-    private String resolveBusinessCategory(String selectedCode, String customLabel) {
+    /**
+     * Resolves the {@code business_category} value to persist on the tenant record.
+     *
+     * <p>If the tenant picked a real industry from the dropdown, returns its code as-is.</p>
+     *
+     * <p>If the tenant picked {@code OTHER} and supplied a custom label, the label is sanitized to
+     * a code. If a row already exists with that code, it is reused (regardless of moderation
+     * status — this lets multiple tenants pile onto the same pending suggestion). Otherwise a new
+     * row is inserted with {@link BusinessCategoryStatus#PENDING_REVIEW} so it does NOT show up in
+     * the public dropdown until an admin approves it. The submitted label, original spelling and
+     * the submitting tenant id are preserved for moderation.</p>
+     *
+     * <p>Existing seeded categories are unaffected — they were migrated to {@code APPROVED}.</p>
+     */
+    private String resolveBusinessCategory(String selectedCode, String customLabel, String submittedByTenantId) {
         if (!"OTHER".equalsIgnoreCase(selectedCode) || customLabel == null || customLabel.isBlank()) {
             return selectedCode.toUpperCase();
         }
 
-        String code = customLabel.trim()
+        String trimmedLabel = customLabel.trim();
+        String code = trimmedLabel
                 .toUpperCase()
                 .replaceAll("[^A-Z0-9]+", "_")
                 .replaceAll("^_|_$", "");
         if (code.length() > 32) code = code.substring(0, 32);
 
+        // Reuse existing row (any status) so we don't double-insert nor leak duplicate codes.
         if (businessCategoryRepository.existsById(code)) {
             return code;
         }
 
-        int maxSort = businessCategoryRepository.findByActiveTrueOrderBySortOrderAscLabelAsc()
+        int maxSort = businessCategoryRepository.findAll()
                 .stream()
-                .mapToInt(RefBusinessCategory::getSortOrder)
+                .mapToInt(c -> c.getSortOrder() == null ? 0 : c.getSortOrder())
                 .max()
                 .orElse(0);
 
         RefBusinessCategory newCat = new RefBusinessCategory();
         newCat.setCode(code);
-        newCat.setLabel(customLabel.trim());
+        newCat.setLabel(trimmedLabel);
         newCat.setSortOrder(maxSort + 10);
         newCat.setActive(true);
+        // Moderation: hidden from the public dropdown until an admin approves.
+        newCat.setStatus(BusinessCategoryStatus.PENDING_REVIEW);
+        newCat.setSubmittedByTenantId(submittedByTenantId);
+        newCat.setSubmittedLabel(trimmedLabel);
         businessCategoryRepository.save(newCat);
 
-        log.info("New business category created: code={}, label={}", code, customLabel.trim());
+        log.info("Industry suggestion submitted for review: code={}, label={}, byTenant={}",
+                code, trimmedLabel, submittedByTenantId);
         return code;
     }
 

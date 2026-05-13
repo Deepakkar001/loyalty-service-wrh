@@ -6,7 +6,6 @@ import com.loyaltyos.onboarding.dto.response.AdminLoginResponse;
 import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
 import com.loyaltyos.onboarding.repository.AdminUserRepository;
 import com.loyaltyos.onboarding.security.JwtProperties;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -16,15 +15,27 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
 public class AdminAuthService {
 
     private final AdminUserRepository adminRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
+
+    public AdminAuthService(
+        AdminUserRepository adminRepository,
+        PasswordEncoder passwordEncoder,
+        JwtEncoder jwtEncoder,
+        JwtProperties jwtProperties
+    ) {
+        this.adminRepository = Objects.requireNonNull(adminRepository, "adminRepository");
+        this.passwordEncoder = Objects.requireNonNull(passwordEncoder, "passwordEncoder");
+        this.jwtEncoder = Objects.requireNonNull(jwtEncoder, "jwtEncoder");
+        this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
+    }
 
     public AdminLoginResponse login(AdminLoginRequest request) {
         String email = request.getEmail().toLowerCase().trim();

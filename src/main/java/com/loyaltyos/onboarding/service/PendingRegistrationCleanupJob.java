@@ -2,8 +2,9 @@ package com.loyaltyos.onboarding.service;
 
 import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,15 +14,23 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 @Component
-@RequiredArgsConstructor
-@Slf4j
 public class PendingRegistrationCleanupJob {
+
+    private static final Logger log = LoggerFactory.getLogger(PendingRegistrationCleanupJob.class);
 
     private final TenantOnboardingRepository tenantRepository;
     private final OnboardingDeletionService deletionService;
 
     @Value("${app.onboarding.pending-expiry-hours:24}")
     private long pendingExpiryHours;
+
+    public PendingRegistrationCleanupJob(
+        TenantOnboardingRepository tenantRepository,
+        OnboardingDeletionService deletionService
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.deletionService = Objects.requireNonNull(deletionService, "deletionService");
+    }
 
     /**
      * Production-grade housekeeping: remove abandoned, unverified signups so

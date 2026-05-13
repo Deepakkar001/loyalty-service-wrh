@@ -7,7 +7,7 @@ import com.loyaltyos.onboarding.service.TenantAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -20,12 +20,16 @@ import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
 @Tag(name = "Auth", description = "Authentication endpoints for tenant admins")
 public class AuthController {
 
     private final TenantAuthService authService;
     private final JwtProperties jwtProperties;
+
+    public AuthController(TenantAuthService authService, JwtProperties jwtProperties) {
+        this.authService = Objects.requireNonNull(authService, "authService");
+        this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
+    }
 
     @PostMapping("/login")
     @Operation(summary = "Tenant admin login",
@@ -42,6 +46,10 @@ public class AuthController {
         description = "Rotates refresh token and returns a new access token. Refresh token is stored in HttpOnly cookie.")
     public ResponseEntity<LoginResponse> refresh(HttpServletRequest request) {
         String refreshToken = readCookie(request, jwtProperties.getRefreshCookieName());
+        if (refreshToken == null || refreshToken.isBlank()) {
+            // Production hardening: reject refresh without cookie rather than passing null downstream.
+            return ResponseEntity.status(401).build();
+        }
         var result = authService.refresh(refreshToken);
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
@@ -52,7 +60,10 @@ public class AuthController {
     @Operation(summary = "Logout", description = "Revokes refresh token and clears cookie.")
     public ResponseEntity<Void> logout(HttpServletRequest request) {
         String refreshToken = readCookie(request, jwtProperties.getRefreshCookieName());
-        authService.logout(refreshToken);
+        // Logout should be idempotent; if cookie missing, just clear cookie.
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            authService.logout(refreshToken);
+        }
         return ResponseEntity.noContent()
             .header(HttpHeaders.SET_COOKIE, clearRefreshCookie())
             .build();

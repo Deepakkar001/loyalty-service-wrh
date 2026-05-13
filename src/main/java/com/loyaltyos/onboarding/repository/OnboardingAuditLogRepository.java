@@ -6,10 +6,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public interface OnboardingAuditLogRepository extends JpaRepository<OnboardingAuditLog, Long> {
     Page<OnboardingAuditLog> findByTenantIdOrderByCreatedAtDesc(String tenantId, Pageable pageable);
     Page<OnboardingAuditLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
     void deleteByTenantId(String tenantId);
+
+    Optional<OnboardingAuditLog> findTopByTenantIdAndActionOrderByCreatedAtDesc(String tenantId, String action);
 }
 

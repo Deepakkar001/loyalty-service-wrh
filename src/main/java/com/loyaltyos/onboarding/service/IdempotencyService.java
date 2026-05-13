@@ -2,15 +2,14 @@ package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 public class IdempotencyService {
 
     private static final Duration TTL = Duration.ofHours(24);
@@ -19,9 +18,14 @@ public class IdempotencyService {
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
 
+    public IdempotencyService(StringRedisTemplate redis, ObjectMapper objectMapper) {
+        this.redis = Objects.requireNonNull(redis, "redis");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+    }
+
     public <T> Optional<T> getCachedResponse(String idempotencyKey, Class<T> type) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) return Optional.empty();
-        String json = redis.opsForValue().get(PREFIX + idempotencyKey.trim());
+        String json = redis.opsForValue().get(Objects.requireNonNull(PREFIX + idempotencyKey.trim(), "key"));
         if (json == null || json.isBlank()) return Optional.empty();
         try {
             return Optional.of(objectMapper.readValue(json, type));
@@ -37,7 +41,11 @@ public class IdempotencyService {
         if (idempotencyKey == null || idempotencyKey.isBlank() || response == null) return;
         try {
             String json = objectMapper.writeValueAsString(response);
-            redis.opsForValue().set((PREFIX + idempotencyKey.trim()), json, TTL);
+            redis.opsForValue().set(
+                Objects.requireNonNull(PREFIX + idempotencyKey.trim(), "key"),
+                Objects.requireNonNull(json, "json"),
+                Objects.requireNonNull(TTL, "ttl")
+            );
         } catch (JsonProcessingException ignored) {
             // Best effort.
         }

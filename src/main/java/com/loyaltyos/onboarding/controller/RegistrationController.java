@@ -5,11 +5,12 @@ import com.loyaltyos.onboarding.dto.request.ResendVerificationRequest;
 import com.loyaltyos.onboarding.dto.request.VerifyEmailCodeRequest;
 import com.loyaltyos.onboarding.dto.response.TenantRegistrationResponse;
 import com.loyaltyos.onboarding.dto.response.TenantStatusResponse;
+import com.loyaltyos.onboarding.service.IdempotencyService;
 import com.loyaltyos.onboarding.service.TenantRegistrationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,12 +18,16 @@ import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/v1/onboarding")
-@RequiredArgsConstructor
 @Tag(name = "Tenant Onboarding", description = "Tenant registration and onboarding workflow")
 public class RegistrationController {
 
     private final TenantRegistrationService registrationService;
-    private final com.loyaltyos.onboarding.service.IdempotencyService idempotencyService;
+    private final IdempotencyService idempotencyService;
+
+    public RegistrationController(TenantRegistrationService registrationService, IdempotencyService idempotencyService) {
+        this.registrationService = Objects.requireNonNull(registrationService, "registrationService");
+        this.idempotencyService = Objects.requireNonNull(idempotencyService, "idempotencyService");
+    }
 
     @PostMapping("/register")
     @Operation(summary = "Register a new tenant",
@@ -45,7 +50,7 @@ public class RegistrationController {
     @GetMapping("/verify-email")
     @Operation(summary = "Verify tenant email address",
                description = "Stage 1: Confirms email using the token sent in the verification email")
-    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
+    public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
         registrationService.verifyEmail(token);
         return ResponseEntity.ok().build();
     }
@@ -69,7 +74,7 @@ public class RegistrationController {
     @GetMapping("/{tenantId}/status")
     @Operation(summary = "Get current onboarding status",
                description = "Returns the current stage and status of the tenant's onboarding journey")
-    public ResponseEntity<TenantStatusResponse> getStatus(@PathVariable String tenantId) {
+    public ResponseEntity<TenantStatusResponse> getStatus(@PathVariable("tenantId") String tenantId) {
         return ResponseEntity.ok(registrationService.getStatus(tenantId));
     }
 

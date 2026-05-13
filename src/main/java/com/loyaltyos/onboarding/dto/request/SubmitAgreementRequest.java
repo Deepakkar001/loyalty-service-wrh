@@ -7,14 +7,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-@Getter
-@Setter
 public class SubmitAgreementRequest {
 
     @NotBlank(message = "Terms version is required")
@@ -61,5 +57,36 @@ public class SubmitAgreementRequest {
 
     @Size(max = 255, message = "Designation must be at most 255 characters")
     private String signedByDesignation;
+
+    public SubmitAgreementRequest() {}
+
+    public String getTermsVersion() { return termsVersion; }
+    public void setTermsVersion(String termsVersion) { this.termsVersion = termsVersion; }
+    public LocalDate getEffectiveDate() { return effectiveDate; }
+    public void setEffectiveDate(LocalDate effectiveDate) { this.effectiveDate = effectiveDate; }
+    public BigDecimal getRevenueSharePct() { return revenueSharePct; }
+    public void setRevenueSharePct(BigDecimal revenueSharePct) { this.revenueSharePct = revenueSharePct; }
+    public SettlementFrequency getSettlementFrequency() { return settlementFrequency; }
+    public void setSettlementFrequency(SettlementFrequency settlementFrequency) { this.settlementFrequency = settlementFrequency; }
+    public String getPointsCurrency() { return pointsCurrency; }
+    public void setPointsCurrency(String pointsCurrency) { this.pointsCurrency = pointsCurrency; }
+    public Integer getExpectedDailyTxnVolume() { return expectedDailyTxnVolume; }
+    public void setExpectedDailyTxnVolume(Integer expectedDailyTxnVolume) { this.expectedDailyTxnVolume = expectedDailyTxnVolume; }
+    public String getBillingContactName() { return billingContactName; }
+    public void setBillingContactName(String billingContactName) { this.billingContactName = billingContactName; }
+    public String getBillingAddress() { return billingAddress; }
+    public void setBillingAddress(String billingAddress) { this.billingAddress = billingAddress; }
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+    public Integer getContractDurationMonths() { return contractDurationMonths; }
+    public void setContractDurationMonths(Integer contractDurationMonths) { this.contractDurationMonths = contractDurationMonths; }
+    public Boolean getAutoRenewal() { return autoRenewal; }
+    public void setAutoRenewal(Boolean autoRenewal) { this.autoRenewal = autoRenewal; }
+    public String getSignedByName() { return signedByName; }
+    public void setSignedByName(String signedByName) { this.signedByName = signedByName; }
+    public String getSignedByEmail() { return signedByEmail; }
+    public void setSignedByEmail(String signedByEmail) { this.signedByEmail = signedByEmail; }
+    public String getSignedByDesignation() { return signedByDesignation; }
+    public void setSignedByDesignation(String signedByDesignation) { this.signedByDesignation = signedByDesignation; }
 }
 

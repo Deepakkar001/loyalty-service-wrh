@@ -7,7 +7,7 @@ import com.loyaltyos.onboarding.dto.response.AuditLogItem;
 import com.loyaltyos.onboarding.service.AdminDashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,11 +15,14 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/admin/dashboard")
-@RequiredArgsConstructor
 @Tag(name = "Admin Dashboard", description = "Admin analytics and tenant management")
 public class AdminDashboardController {
 
     private final AdminDashboardService dashboardService;
+
+    public AdminDashboardController(AdminDashboardService dashboardService) {
+        this.dashboardService = Objects.requireNonNull(dashboardService, "dashboardService");
+    }
 
     @GetMapping("/stats")
     @Operation(summary = "Dashboard statistics", description = "Returns aggregate counts for the admin overview")
@@ -35,22 +38,22 @@ public class AdminDashboardController {
 
     @GetMapping("/tenants/{tenantId}")
     @Operation(summary = "Tenant detail", description = "Returns full tenant information including contacts and agreements")
-    public ResponseEntity<AdminTenantDetail> getTenantDetail(@PathVariable String tenantId) {
+    public ResponseEntity<AdminTenantDetail> getTenantDetail(@PathVariable("tenantId") String tenantId) {
         return ResponseEntity.ok(dashboardService.getTenantDetail(tenantId));
     }
 
     @GetMapping("/audit-logs")
     @Operation(summary = "Recent audit logs", description = "Returns latest audit log entries")
     public ResponseEntity<List<AuditLogItem>> getAuditLogs(
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(name = "limit", defaultValue = "50") int limit) {
         return ResponseEntity.ok(dashboardService.getRecentAuditLogs(Math.min(limit, 200)));
     }
 
     @GetMapping("/tenants/{tenantId}/audit-logs")
     @Operation(summary = "Tenant audit logs", description = "Returns audit logs for a specific tenant")
     public ResponseEntity<List<AuditLogItem>> getTenantAuditLogs(
-            @PathVariable String tenantId,
-            @RequestParam(defaultValue = "50") int limit) {
+            @PathVariable("tenantId") String tenantId,
+            @RequestParam(name = "limit", defaultValue = "50") int limit) {
         return ResponseEntity.ok(dashboardService.getTenantAuditLogs(tenantId, Math.min(limit, 200)));
     }
 

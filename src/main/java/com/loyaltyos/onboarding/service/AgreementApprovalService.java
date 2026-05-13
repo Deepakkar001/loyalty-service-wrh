@@ -4,13 +4,16 @@ import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.domain.entity.TenantAgreement;
 import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
+import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.dto.response.PendingAgreementListItem;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,14 +22,29 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class AgreementApprovalService {
+
+    private static final Logger log = LoggerFactory.getLogger(AgreementApprovalService.class);
 
     private final TenantAgreementRepository agreementRepository;
     private final TenantOnboardingRepository tenantRepository;
     private final OnboardingAuditLogRepository auditLogRepository;
     private final AgreementNotificationMailer notificationMailer;
+    private final OnboardingStateMachine stateMachine;
+
+    public AgreementApprovalService(
+        TenantAgreementRepository agreementRepository,
+        TenantOnboardingRepository tenantRepository,
+        OnboardingAuditLogRepository auditLogRepository,
+        AgreementNotificationMailer notificationMailer,
+        OnboardingStateMachine stateMachine
+    ) {
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
+        this.notificationMailer = Objects.requireNonNull(notificationMailer, "notificationMailer");
+        this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
+    }
 
     @Transactional(readOnly = true)
     public List<PendingAgreementListItem> listPendingAgreements() {
@@ -75,23 +93,25 @@ public class AgreementApprovalService {
         agreement.setApprovedAt(Instant.now());
         agreementRepository.save(agreement);
 
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog approvedAudit = OnboardingAuditLog.builder()
                 .tenantId(agreement.getTenantId())
                 .action("AGREEMENT_APPROVED")
                 .actorId(adminUid)
                 .actorRole(adminRole)
                 .beforeState(Map.of("agreementStatus", AgreementStatus.PENDING_APPROVAL.name()))
                 .afterState(Map.of(
+                        "agreementUid", agreementUid,
                         "agreementStatus", AgreementStatus.APPROVED.name(),
                         "approvedBy", adminUid,
                         "approvalNotes", approvalNotes != null ? approvalNotes : ""
                 ))
-                .build());
+                .build();
+        auditLogRepository.save(Objects.requireNonNull(approvedAudit, "approvedAudit"));
 
         log.info("Agreement [{}] for tenant [{}] APPROVED by admin [{}]",
                 agreementUid, agreement.getTenantId(), adminUid);
 
-        sendApprovalNotification(agreement);
+        sendApprovalNotification(agreement, approvalNotes);
     }
 
     @Transactional
@@ -110,21 +130,31 @@ public class AgreementApprovalService {
         agreement.setApprovedByAdminId(adminUid);
         agreementRepository.save(agreement);
 
-        auditLogRepository.save(OnboardingAuditLog.builder()
+        OnboardingAuditLog rejectedAudit = OnboardingAuditLog.builder()
                 .tenantId(agreement.getTenantId())
                 .action("AGREEMENT_REJECTED")
                 .actorId(adminUid)
                 .actorRole(adminRole)
                 .beforeState(Map.of("agreementStatus", AgreementStatus.PENDING_APPROVAL.name()))
                 .afterState(Map.of(
+                        "agreementUid", agreementUid,
                         "agreementStatus", AgreementStatus.REJECTED.name(),
                         "rejectedBy", adminUid,
                         "rejectionReason", rejectionReason
                 ))
-                .build());
+                .build();
+        auditLogRepository.save(Objects.requireNonNull(rejectedAudit, "rejectedAudit"));
 
         log.info("Agreement [{}] for tenant [{}] REJECTED by admin [{}]: {}",
                 agreementUid, agreement.getTenantId(), adminUid, rejectionReason);
+
+        // Critical fix: rejection must move tenant to AGREEMENT_REJECTED so they cannot proceed to configuration.
+        tenantRepository.findByTenantId(agreement.getTenantId()).ifPresent(tenant -> {
+            if (tenant.getOnboardingStatus() == OnboardingStatus.AGREEMENT_SIGNED) {
+                stateMachine.transition(tenant, OnboardingStatus.AGREEMENT_REJECTED, adminUid, adminRole);
+                tenantRepository.save(tenant);
+            }
+        });
 
         sendRejectionNotification(agreement, rejectionReason);
     }
@@ -141,9 +171,9 @@ public class AgreementApprovalService {
         });
     }
 
-    private void sendApprovalNotification(TenantAgreement agreement) {
+    private void sendApprovalNotification(TenantAgreement agreement, String approvalNotes) {
         tenantRepository.findByTenantId(agreement.getTenantId()).ifPresent(tenant ->
-                notificationMailer.sendApprovalEmail(tenant.getEmail(), tenant.getCompanyName()));
+                notificationMailer.sendApprovalEmail(tenant.getEmail(), tenant.getCompanyName(), approvalNotes));
     }
 
     private void sendRejectionNotification(TenantAgreement agreement, String reason) {

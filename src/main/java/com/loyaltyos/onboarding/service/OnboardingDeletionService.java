@@ -3,17 +3,27 @@ package com.loyaltyos.onboarding.service;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantContactRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
+
 @Service
-@RequiredArgsConstructor
 public class OnboardingDeletionService {
 
     private final TenantOnboardingRepository tenantRepository;
     private final TenantContactRepository contactRepository;
     private final TenantAgreementRepository agreementRepository;
+
+    public OnboardingDeletionService(
+        TenantOnboardingRepository tenantRepository,
+        TenantContactRepository contactRepository,
+        TenantAgreementRepository agreementRepository
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.contactRepository = Objects.requireNonNull(contactRepository, "contactRepository");
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+    }
 
     /**
      * Centralized deletion for onboarding-owned data.

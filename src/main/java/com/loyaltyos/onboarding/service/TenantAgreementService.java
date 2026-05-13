@@ -9,20 +9,29 @@ import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class TenantAgreementService {
 
     private final TenantOnboardingRepository tenantRepository;
     private final TenantAgreementRepository agreementRepository;
     private final OnboardingStateMachine stateMachine;
+
+    public TenantAgreementService(
+        TenantOnboardingRepository tenantRepository,
+        TenantAgreementRepository agreementRepository,
+        OnboardingStateMachine stateMachine
+    ) {
+        this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
+        this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
+    }
 
     @Transactional
     public void submitAgreement(String tenantId, SubmitAgreementRequest request) {
@@ -32,6 +41,9 @@ public class TenantAgreementService {
         OnboardingStatus status = tenant.getOnboardingStatus();
 
         if (status == OnboardingStatus.EMAIL_VERIFIED) {
+            stateMachine.transition(tenant, OnboardingStatus.AGREEMENT_PENDING, tenantId, "TENANT");
+        } else if (status == OnboardingStatus.AGREEMENT_REJECTED) {
+            // Tenant resubmission after admin rejection: move back to AGREEMENT_PENDING
             stateMachine.transition(tenant, OnboardingStatus.AGREEMENT_PENDING, tenantId, "TENANT");
         } else if (status == OnboardingStatus.AGREEMENT_SIGNED) {
             // Resubmission after rejection: move back to AGREEMENT_PENDING
@@ -81,7 +93,7 @@ public class TenantAgreementService {
             .signedAt(Instant.now())
             .build();
 
-        agreementRepository.save(agreement);
+        agreementRepository.save(Objects.requireNonNull(agreement, "agreement"));
     }
 }
 

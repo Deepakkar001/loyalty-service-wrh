@@ -6,7 +6,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:}
+    password: ${DB_PASSWORD:deepak9153}
 
   mail:
     host: ${SPRING_MAIL_HOST:smtp.gmail.com}
@@ -36,7 +36,7 @@ app:
   email:
     log-code-on-send-failure: ${APP_EMAIL_LOG_CODE_ON_SEND_FAILURE:true}
   jwt:
-    secret: ${APP_JWT_SECRET:}
+    secret: ${APP_JWT_SECRET:loyaltyos-local-dev-super-secret-32-chars-minimum}
     issuer: ${APP_JWT_ISSUER:loyaltyos-tenant-onboarding}
     access-ttl-minutes: ${APP_JWT_ACCESS_TTL_MINUTES:60}
 
