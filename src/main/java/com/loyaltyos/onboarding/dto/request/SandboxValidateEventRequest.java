@@ -3,8 +3,8 @@ package com.loyaltyos.onboarding.dto.request;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * Truthful MVP: validate payload against tenant_config.event_schema.
- * The schema format is tenant-defined JSON; for now we just require a JSON payload string.
+ * Sandbox event validation: parses {@code payloadJson} and validates required fields against the
+ * active {@code programme_config} JSON for the {@code programmeUid} in the payload (default programme when omitted).
  */
 public class SandboxValidateEventRequest {
     @NotBlank

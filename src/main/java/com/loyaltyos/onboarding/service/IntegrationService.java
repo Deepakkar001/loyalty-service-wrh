@@ -1,11 +1,13 @@
 package com.loyaltyos.onboarding.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.loyaltyos.onboarding.domain.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.domain.entity.SandboxTestEvent;
 import com.loyaltyos.onboarding.domain.entity.TenantApiKey;
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
 import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.domain.entity.WebhookSubscription;
 import com.loyaltyos.onboarding.domain.enums.ApiKeyEnvironment;
@@ -72,6 +74,7 @@ public class IntegrationService {
     private final RestTemplateBuilder restTemplateBuilder;
     private final RuleEvaluationService ruleEvaluationService;
     private final SandboxTestEventRepository sandboxTestEventRepository;
+    private final ProgrammeService programmeService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -85,7 +88,8 @@ public class IntegrationService {
         ObjectMapper objectMapper,
         RestTemplateBuilder restTemplateBuilder,
         RuleEvaluationService ruleEvaluationService,
-        SandboxTestEventRepository sandboxTestEventRepository
+        SandboxTestEventRepository sandboxTestEventRepository,
+        ProgrammeService programmeService
     ) {
         this.tenantOnboardingRepository = Objects.requireNonNull(tenantOnboardingRepository, "tenantOnboardingRepository");
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
@@ -97,6 +101,7 @@ public class IntegrationService {
         this.restTemplateBuilder = Objects.requireNonNull(restTemplateBuilder, "restTemplateBuilder");
         this.ruleEvaluationService = Objects.requireNonNull(ruleEvaluationService, "ruleEvaluationService");
         this.sandboxTestEventRepository = Objects.requireNonNull(sandboxTestEventRepository, "sandboxTestEventRepository");
+        this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
     }
 
     public ApiKeyGeneratedResponse generateSandboxKeysLegacy(String tenantId) {
@@ -277,10 +282,10 @@ public class IntegrationService {
 
     @Transactional
     public Map<String, Object> validateSandboxEvent(String tenantId, SandboxValidateEventRequest request) {
-        TenantConfig cfg = tenantConfigRepository.findByTenantId(tenantId)
+        tenantConfigRepository.findByTenantId(tenantId)
             .orElseThrow(() -> new TenantNotFoundException(tenantId));
 
-        // MVP: Ensure payload is valid JSON. If event_schema exists, ensure required base fields exist.
+        // Parse JSON, then validate required keys against programme_config (eventSchema) when present.
         Map<String, Object> payload;
         try {
             payload = objectMapper.readValue(request.getPayloadJson(), new TypeReference<Map<String, Object>>() {});
@@ -289,10 +294,29 @@ public class IntegrationService {
                 "Invalid JSON payload", Map.of("payloadJson", "Must be valid JSON object"));
         }
 
+        String programmeUid = resolveProgrammeUid(payload);
         Map<String, String> errors = new LinkedHashMap<>();
-        if (!payload.containsKey("eventType")) errors.put("eventType", "eventType is required");
-        if (!payload.containsKey("timestamp")) errors.put("timestamp", "timestamp is required");
-        if (!payload.containsKey("transactionId")) errors.put("transactionId", "transactionId is required");
+        boolean programmeSchemaPresent = false;
+        try {
+            ProgrammeConfig programmeCfg = programmeService.getActiveConfigOrNull(tenantId, programmeUid);
+            if (programmeCfg != null && programmeCfg.getConfigJson() != null && !programmeCfg.getConfigJson().isBlank()) {
+                programmeSchemaPresent = true;
+                JsonNode root = objectMapper.readTree(programmeCfg.getConfigJson());
+                errors.putAll(EventSchemaPayloadValidator.validatePayload(payload, root));
+            } else {
+                if (!payload.containsKey("eventType")) {
+                    errors.put("eventType", "eventType is required");
+                }
+                if (!payload.containsKey("timestamp")) {
+                    errors.put("timestamp", "timestamp is required");
+                }
+                if (!payload.containsKey("transactionId")) {
+                    errors.put("transactionId", "transactionId is required");
+                }
+            }
+        } catch (JsonProcessingException e) {
+            errors.put("programmeConfig", "Unable to read programme configuration");
+        }
 
         if (!errors.isEmpty()) {
             throw new com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException(
@@ -303,7 +327,7 @@ public class IntegrationService {
         result.put("status", "VALID");
         result.put("tenantId", tenantId);
         result.put("payload", payload);
-        result.put("schemaPresent", cfg.getEventSchema() != null && !cfg.getEventSchema().isBlank());
+        result.put("schemaPresent", programmeSchemaPresent);
 
         try {
             Object cid = payload.get("customerId");
@@ -311,7 +335,6 @@ public class IntegrationService {
             Object eventType = payload.get("eventType");
             Object txnId = payload.get("transactionId");
             if (cid != null && amount != null && eventType != null && txnId != null) {
-                String programmeUid = resolveProgrammeUid(payload);
                 RuleEvaluateRequest ruleReq = RuleEvaluateRequest.builder()
                     .programmeUid(programmeUid)
                     .customerId(String.valueOf(cid))

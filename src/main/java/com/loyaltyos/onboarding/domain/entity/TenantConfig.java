@@ -52,9 +52,6 @@ public class TenantConfig {
     @Column(name = "feature_flags", columnDefinition = "JSON")
     private String featureFlags = "{}";
 
-    @Column(name = "event_schema", columnDefinition = "JSON")
-    private String eventSchema;
-
     @Column(name = "webhook_config", columnDefinition = "JSON")
     private String webhookConfig;
 
@@ -98,7 +95,6 @@ public class TenantConfig {
         java.math.BigDecimal pointsCurrencyRate,
         java.math.BigDecimal dailyPointsCap,
         String featureFlags,
-        String eventSchema,
         String webhookConfig,
         String branding,
         String programmeConfig,
@@ -118,7 +114,6 @@ public class TenantConfig {
         this.pointsCurrencyRate = pointsCurrencyRate != null ? pointsCurrencyRate : new java.math.BigDecimal("0.010000");
         this.dailyPointsCap = dailyPointsCap;
         this.featureFlags = featureFlags != null ? featureFlags : "{}";
-        this.eventSchema = eventSchema;
         this.webhookConfig = webhookConfig;
         this.branding = branding;
         this.programmeConfig = programmeConfig;
@@ -144,7 +139,6 @@ public class TenantConfig {
         private java.math.BigDecimal pointsCurrencyRate = new java.math.BigDecimal("0.010000");
         private java.math.BigDecimal dailyPointsCap;
         private String featureFlags = "{}";
-        private String eventSchema;
         private String webhookConfig;
         private String branding;
         private String programmeConfig;
@@ -166,7 +160,6 @@ public class TenantConfig {
         public Builder pointsCurrencyRate(java.math.BigDecimal pointsCurrencyRate) { this.pointsCurrencyRate = pointsCurrencyRate; return this; }
         public Builder dailyPointsCap(java.math.BigDecimal dailyPointsCap) { this.dailyPointsCap = dailyPointsCap; return this; }
         public Builder featureFlags(String featureFlags) { this.featureFlags = featureFlags; return this; }
-        public Builder eventSchema(String eventSchema) { this.eventSchema = eventSchema; return this; }
         public Builder webhookConfig(String webhookConfig) { this.webhookConfig = webhookConfig; return this; }
         public Builder branding(String branding) { this.branding = branding; return this; }
         public Builder programmeConfig(String programmeConfig) { this.programmeConfig = programmeConfig; return this; }
@@ -188,7 +181,6 @@ public class TenantConfig {
                 pointsCurrencyRate,
                 dailyPointsCap,
                 featureFlags,
-                eventSchema,
                 webhookConfig,
                 branding,
                 programmeConfig,
@@ -220,8 +212,6 @@ public class TenantConfig {
     public void setDailyPointsCap(java.math.BigDecimal dailyPointsCap) { this.dailyPointsCap = dailyPointsCap; }
     public String getFeatureFlags() { return featureFlags; }
     public void setFeatureFlags(String featureFlags) { this.featureFlags = featureFlags; }
-    public String getEventSchema() { return eventSchema; }
-    public void setEventSchema(String eventSchema) { this.eventSchema = eventSchema; }
     public String getWebhookConfig() { return webhookConfig; }
     public void setWebhookConfig(String webhookConfig) { this.webhookConfig = webhookConfig; }
     public String getBranding() { return branding; }

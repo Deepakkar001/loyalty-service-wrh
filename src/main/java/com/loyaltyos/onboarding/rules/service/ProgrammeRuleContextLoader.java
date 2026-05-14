@@ -102,6 +102,17 @@ public class ProgrammeRuleContextLoader {
         names.add("timestamp");
         names.add("customerId");
         JsonNode es = programmeRoot.path("eventSchema");
+        JsonNode defs = es.path("eventDefinitions");
+        if (defs.isArray()) {
+            for (JsonNode def : defs) {
+                for (JsonNode sf : def.path("coreFields")) {
+                    String n = sf.path("name").asText(null);
+                    if (n != null && !n.isBlank()) {
+                        names.add(n);
+                    }
+                }
+            }
+        }
         for (JsonNode sf : es.path("standardFields")) {
             String n = sf.path("name").asText(null);
             if (n != null && !n.isBlank()) {

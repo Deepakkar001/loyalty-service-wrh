@@ -57,7 +57,7 @@ class IntegrationServiceTest {
         IntegrationService svc = new IntegrationService(
             tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
             new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
-            mock(SandboxTestEventRepository.class)
+            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class)
         );
 
         assertThrows(InvalidStateException.class, () -> svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX));
@@ -98,7 +98,7 @@ class IntegrationServiceTest {
         IntegrationService svc = new IntegrationService(
             tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
             new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
-            mock(SandboxTestEventRepository.class)
+            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class)
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX);
