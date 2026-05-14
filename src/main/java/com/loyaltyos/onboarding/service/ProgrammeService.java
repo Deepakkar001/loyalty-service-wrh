@@ -122,6 +122,16 @@ public class ProgrammeService {
         ProgrammeConfig saved = programmeConfigRepository.save(Objects.requireNonNull(row, "programmeConfig"));
 
         p.setActiveConfigVersion(nextVersion);
+        // Keep programmes.name aligned with programmeIdentity.programmeName so list APIs and admin UIs
+        // show the same label tenants edit in configuration (avoids stale "Programme 2" style rows).
+        JsonNode identity = config.path("programmeIdentity");
+        if (!identity.isMissingNode() && identity.hasNonNull("programmeName")) {
+            String displayName = identity.get("programmeName").asText("").trim();
+            if (!displayName.isEmpty()) {
+                p.setName(displayName);
+            }
+        }
+        p.setUpdatedAt(Instant.now());
         programmeRepository.save(p);
 
         ruleCacheService.invalidateProgramme(tenantId, programmeUid);
