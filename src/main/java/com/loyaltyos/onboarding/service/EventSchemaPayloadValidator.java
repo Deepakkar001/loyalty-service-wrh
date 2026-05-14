@@ -7,6 +7,12 @@ import java.util.Map;
 /**
  * Validates an incoming event JSON map against the programme's {@code eventSchema}.
  * Supports {@code eventDefinitions} (per eventType core fields) with legacy fallback to {@code standardFields}.
+ * <p><b>Persistence of {@code required}.</b> Field definitions live in MySQL {@code programme_config.config_json}
+ * under {@code eventSchema}, for example {@code eventDefinitions[].coreFields[]} and {@code customFields[]}, each with
+ * {@code name}, {@code type}, and {@code required}. Values are written when tenants save configuration through
+ * {@code PUT /api/v2/programmes/{uid}/config} (see {@link com.loyaltyos.onboarding.service.ProgrammeService#saveConfig}).
+ * This class only reads the stored booleans: for every field where {@code required} is true, the payload must include
+ * that property or validation returns an error map used by sandbox validation and integration flows.</p>
  */
 public final class EventSchemaPayloadValidator {
 

@@ -95,6 +95,16 @@ public class ProgrammeService {
             .orElse(null);
     }
 
+    /**
+     * Persists a new row in {@code programme_config} (versioned JSON in {@code config_json}) for the tenant's programme.
+     * <p><b>Event schema {@code required} flags:</b> Each core/custom field object in {@code eventSchema} may include
+     * {@code "required": true|false}. That value is stored verbatim in {@code config_json}. At ingestion time,
+     * {@link EventSchemaPayloadValidator} reads those flags: when {@code required} is true, the incoming event map must
+     * contain a non-null value for that field name or validation fails. Toggling Required in the tenant UI and saving
+     * configuration therefore updates the database on the next successful save (new {@code config_version} row).</p>
+     * <p>The next {@code config_version} is {@code max(latest row in programme_config, programmes.active_config_version) + 1}
+     * so inserts never collide with {@code uk_programme_version} when the programme row was not updated in sync.</p>
+     */
     @Transactional
     public ProgrammeConfig saveConfig(String tenantId, String programmeUid, JsonNode config, String actorId, String actorRole) {
         Programme p = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
@@ -102,7 +112,15 @@ public class ProgrammeService {
 
         schemaValidator.validate(config);
 
-        int nextVersion = (p.getActiveConfigVersion() == null ? 0 : p.getActiveConfigVersion()) + 1;
+        // programme_config is the version source of truth; programmes.active_config_version can lag (e.g. legacy
+        // onboarding paths that wrote programme_config without updating the programme row). Always take the max
+        // so we never insert a duplicate (tenant_id, programme_uid, config_version).
+        int latestPersisted = programmeConfigRepository
+            .findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc(tenantId, programmeUid)
+            .map(c -> c.getConfigVersion() == null ? 0 : c.getConfigVersion())
+            .orElse(0);
+        int activeOnProgrammeRow = p.getActiveConfigVersion() == null ? 0 : p.getActiveConfigVersion();
+        int nextVersion = Math.max(latestPersisted, activeOnProgrammeRow) + 1;
         String json;
         try {
             json = objectMapper.writeValueAsString(config);
