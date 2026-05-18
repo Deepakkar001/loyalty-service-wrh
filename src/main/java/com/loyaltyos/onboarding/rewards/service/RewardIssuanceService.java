@@ -151,14 +151,18 @@ public class RewardIssuanceService {
                 BigDecimal pts = cmd.getPointsToAward().setScale(MAX_POINTS_SCALE, RoundingMode.HALF_UP);
                 total = total.add(pts);
 
-                Long rulePk = earnRuleRepository
-                    .findByTenantIdAndProgrammeUidAndRuleUid(tenantId, programmeUid, cmd.getSourceRuleUid())
-                    .map(EarnRule::getId)
-                    .orElse(null);
+                Long rulePk = null;
+                String campaignUid = normalizeBlank(cmd.getSourceCampaignUid());
+                if (campaignUid == null) {
+                    rulePk = earnRuleRepository
+                        .findByTenantIdAndProgrammeUidAndRuleUid(tenantId, programmeUid, cmd.getSourceRuleUid())
+                        .map(EarnRule::getId)
+                        .orElse(null);
+                }
 
                 String description = buildDescription(eventId, cmd, request.getNarrative());
 
-                Instant creditExpiresAt = defaultCreditExpiresAt();
+                Instant creditExpiresAt = cmd.getExpiresAt() != null ? cmd.getExpiresAt() : defaultCreditExpiresAt();
 
                 PointsLedger row = PointsLedger.builder()
                     .tenantId(tenantId)
@@ -169,7 +173,7 @@ public class RewardIssuanceService {
                     .points(pts)
                     .sourceRuleId(rulePk)
                     .sourceEventId(eventId)
-                    .sourceCampaignId(null)
+                    .sourceCampaignId(campaignUid)
                     .expiresAt(creditExpiresAt)
                     .description(description)
                     .createdBy("REWARD_ENGINE")
@@ -189,7 +193,7 @@ public class RewardIssuanceService {
             List<RewardIssueResponse.IssuedLedgerLine> lines = new ArrayList<>();
             for (PointsLedger row : saved) {
                 RewardIssueCommandDto cmd = byKey.get(row.getIdempotencyKey());
-                String ruleUid = cmd != null ? cmd.getSourceRuleUid() : ruleUidFromLedger(row);
+                String ruleUid = cmd != null ? sourceLabel(cmd, row) : labelFromLedgerRow(row);
                 lines.add(new RewardIssueResponse.IssuedLedgerLine(
                     row.getId(),
                     row.getIdempotencyKey(),
@@ -246,8 +250,17 @@ public class RewardIssuanceService {
             if (cmd.getIdempotencyKey().length() > 128) {
                 throw new RewardIssuanceValidationException("idempotencyKey exceeds 128 characters.");
             }
-            if (!ActionType.AWARD_POINTS.name().equals(cmd.getActionType())) {
-                throw new RewardIssuanceValidationException("Only actionType AWARD_POINTS is supported; got: " + cmd.getActionType());
+            String campaignUid = normalizeBlank(cmd.getSourceCampaignUid());
+            String ruleUid = normalizeBlank(cmd.getSourceRuleUid());
+            if (campaignUid == null && ruleUid == null) {
+                throw new RewardIssuanceValidationException("Each command must set sourceRuleUid or sourceCampaignUid.");
+            }
+            if (campaignUid != null && ruleUid != null) {
+                throw new RewardIssuanceValidationException("Command cannot set both sourceRuleUid and sourceCampaignUid.");
+            }
+            String actionType = cmd.getActionType() == null ? ActionType.AWARD_POINTS.name() : cmd.getActionType();
+            if (!ActionType.AWARD_POINTS.name().equals(actionType)) {
+                throw new RewardIssuanceValidationException("Only actionType AWARD_POINTS is supported; got: " + actionType);
             }
             if (cmd.getPointsToAward() == null || cmd.getPointsToAward().signum() <= 0) {
                 throw new RewardIssuanceValidationException("pointsToAward must be positive.");
@@ -292,14 +305,6 @@ public class RewardIssuanceService {
             .orElse(BigDecimal.ZERO);
     }
 
-    private String ruleUidFromLedger(PointsLedger row) {
-        Long ruleId = row.getSourceRuleId();
-        if (ruleId == null) {
-            return null;
-        }
-        return earnRuleRepository.findById(ruleId).map(EarnRule::getRuleUid).orElse(null);
-    }
-
     private Instant defaultCreditExpiresAt() {
         int months = rewardEngineProperties.getDefaultCreditExpiryMonths();
         if (months <= 0) {
@@ -309,10 +314,49 @@ public class RewardIssuanceService {
     }
 
     private static String buildDescription(String eventId, RewardIssueCommandDto cmd, String narrative) {
-        String base = "CREDIT AWARD_POINTS event=" + eventId + " rule=" + cmd.getSourceRuleUid();
+        String base;
+        String campaignUid = normalizeBlank(cmd.getSourceCampaignUid());
+        if (campaignUid != null) {
+            base = "CREDIT AWARD_POINTS event=" + eventId + " campaign=" + campaignUid;
+        } else {
+            base = "CREDIT AWARD_POINTS event=" + eventId + " rule=" + cmd.getSourceRuleUid();
+        }
         if (narrative != null && !narrative.isBlank()) {
             return base + " | " + narrative.trim();
         }
         return base;
+    }
+
+    private String sourceLabel(RewardIssueCommandDto cmd, PointsLedger row) {
+        String campaignUid = normalizeBlank(cmd.getSourceCampaignUid());
+        if (campaignUid != null) {
+            return campaignUid;
+        }
+        if (cmd.getSourceRuleUid() != null && !cmd.getSourceRuleUid().isBlank()) {
+            return cmd.getSourceRuleUid();
+        }
+        return labelFromLedgerRow(row);
+    }
+
+    private String ruleUidFromLedger(PointsLedger row) {
+        return labelFromLedgerRow(row);
+    }
+
+    private String labelFromLedgerRow(PointsLedger row) {
+        if (row.getSourceCampaignId() != null && !row.getSourceCampaignId().isBlank()) {
+            return row.getSourceCampaignId();
+        }
+        Long ruleId = row.getSourceRuleId();
+        if (ruleId == null) {
+            return null;
+        }
+        return earnRuleRepository.findById(ruleId).map(EarnRule::getRuleUid).orElse(null);
+    }
+
+    private static String normalizeBlank(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

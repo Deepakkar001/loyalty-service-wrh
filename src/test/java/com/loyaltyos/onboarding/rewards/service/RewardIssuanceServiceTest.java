@@ -151,6 +151,44 @@ class RewardIssuanceServiceTest {
     }
 
     @Test
+    void issue_campaignCommand_setsSourceCampaignId() {
+        RewardIssueRequest req = new RewardIssueRequest();
+        req.setProgrammeUid("default");
+        req.setCustomerId("c1");
+        req.setEventId("evt-camp");
+        RewardIssueCommandDto cmd = new RewardIssueCommandDto();
+        cmd.setIdempotencyKey("camp:camp-1:evt-camp:POINTS_BONUS");
+        cmd.setSourceCampaignUid("camp-1");
+        cmd.setPointsToAward(new BigDecimal("10"));
+        req.setRewardCommands(List.of(cmd));
+
+        when(pointsLedgerRepository.findByTenantIdAndCustomerIdAndIdempotencyKeyIn(eq("t1"), eq("c1"), anyList()))
+            .thenReturn(List.of());
+
+        PointsLedger saved = PointsLedger.builder()
+            .id(100L)
+            .tenantId("t1")
+            .customerId("c1")
+            .programmeUid("default")
+            .idempotencyKey(cmd.getIdempotencyKey())
+            .entryType(LedgerEntryType.CREDIT)
+            .points(new BigDecimal("10"))
+            .sourceCampaignId("camp-1")
+            .sourceEventId("evt-camp")
+            .build();
+        when(pointsLedgerRepository.saveAll(anyList())).thenReturn(List.of(saved));
+
+        service.issue("t1", req);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<PointsLedger>> cap = ArgumentCaptor.forClass(List.class);
+        verify(pointsLedgerRepository).saveAll(cap.capture());
+        assertThat(cap.getValue().getFirst().getSourceCampaignId()).isEqualTo("camp-1");
+        assertThat(cap.getValue().getFirst().getSourceRuleId()).isNull();
+        verify(earnRuleRepository, never()).findByTenantIdAndProgrammeUidAndRuleUid(any(), any(), any());
+    }
+
+    @Test
     void issue_partialIdempotency_throws() {
         RewardIssueRequest req = new RewardIssueRequest();
         req.setProgrammeUid("default");

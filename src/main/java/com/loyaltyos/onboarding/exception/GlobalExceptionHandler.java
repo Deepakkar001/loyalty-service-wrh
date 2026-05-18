@@ -7,6 +7,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
+import com.loyaltyos.campaigns.exception.CampaignConflictException;
+import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -134,6 +137,24 @@ public class GlobalExceptionHandler {
             ex.getFieldErrors()
         );
         return ResponseEntity.unprocessableEntity().body(response);
+    }
+
+    @ExceptionHandler(CampaignBadRequestException.class)
+    public ResponseEntity<ErrorResponse> handleCampaignBadRequest(
+            CampaignBadRequestException ex, WebRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(CampaignNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleCampaignNotFound(
+            CampaignNotFoundException ex, WebRequest request) {
+        return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(CampaignConflictException.class)
+    public ResponseEntity<ErrorResponse> handleCampaignConflict(
+            CampaignConflictException ex, WebRequest request) {
+        return buildResponse(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage(), request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

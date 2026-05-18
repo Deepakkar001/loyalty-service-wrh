@@ -57,6 +57,9 @@ public class PointsLedger {
     @Column(name = "source_campaign_id", length = 128)
     private String sourceCampaignId;
 
+    @Column(name = "reversal_of_ledger_id")
+    private Long reversalOfLedgerId;
+
     @Column(name = "expires_at")
     private Instant expiresAt;
 
@@ -84,6 +87,7 @@ public class PointsLedger {
         Long sourceRuleId,
         String sourceEventId,
         String sourceCampaignId,
+        Long reversalOfLedgerId,
         Instant expiresAt,
         String description,
         String createdBy,
@@ -99,6 +103,7 @@ public class PointsLedger {
         this.sourceRuleId = sourceRuleId;
         this.sourceEventId = sourceEventId;
         this.sourceCampaignId = sourceCampaignId;
+        this.reversalOfLedgerId = reversalOfLedgerId;
         this.expiresAt = expiresAt;
         this.description = description;
         this.createdBy = createdBy;
@@ -118,6 +123,7 @@ public class PointsLedger {
         private Long sourceRuleId;
         private String sourceEventId;
         private String sourceCampaignId;
+        private Long reversalOfLedgerId;
         private Instant expiresAt;
         private String description;
         private String createdBy;
@@ -135,6 +141,7 @@ public class PointsLedger {
         public Builder sourceRuleId(Long sourceRuleId) { this.sourceRuleId = sourceRuleId; return this; }
         public Builder sourceEventId(String sourceEventId) { this.sourceEventId = sourceEventId; return this; }
         public Builder sourceCampaignId(String sourceCampaignId) { this.sourceCampaignId = sourceCampaignId; return this; }
+        public Builder reversalOfLedgerId(Long reversalOfLedgerId) { this.reversalOfLedgerId = reversalOfLedgerId; return this; }
         public Builder expiresAt(Instant expiresAt) { this.expiresAt = expiresAt; return this; }
         public Builder description(String description) { this.description = description; return this; }
         public Builder createdBy(String createdBy) { this.createdBy = createdBy; return this; }
@@ -143,7 +150,7 @@ public class PointsLedger {
         public PointsLedger build() {
             return new PointsLedger(
                 id, tenantId, customerId, programmeUid, idempotencyKey, entryType, points,
-                sourceRuleId, sourceEventId, sourceCampaignId, expiresAt, description, createdBy, createdAt
+                sourceRuleId, sourceEventId, sourceCampaignId, reversalOfLedgerId, expiresAt, description, createdBy, createdAt
             );
         }
     }
@@ -168,6 +175,8 @@ public class PointsLedger {
     public void setSourceEventId(String sourceEventId) { this.sourceEventId = sourceEventId; }
     public String getSourceCampaignId() { return sourceCampaignId; }
     public void setSourceCampaignId(String sourceCampaignId) { this.sourceCampaignId = sourceCampaignId; }
+    public Long getReversalOfLedgerId() { return reversalOfLedgerId; }
+    public void setReversalOfLedgerId(Long reversalOfLedgerId) { this.reversalOfLedgerId = reversalOfLedgerId; }
     public Instant getExpiresAt() { return expiresAt; }
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public String getDescription() { return description; }

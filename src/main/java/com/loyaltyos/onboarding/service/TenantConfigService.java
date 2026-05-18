@@ -130,6 +130,7 @@ public class TenantConfigService {
             for (ProgrammeConfigRequest.TierRequest t : request.getTiers()) {
                 tiers.add(TierDefinition.builder()
                     .tenantId(tenantId)
+                    .programmeUid("default")
                     .tierUid(UUID.randomUUID().toString())
                     .name(t.getName().trim())
                     .rankOrder(t.getRank())

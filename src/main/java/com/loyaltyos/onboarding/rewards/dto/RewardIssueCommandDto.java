@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 /**
  * One earn line from {@link com.loyaltyos.onboarding.rules.dto.RuleEvaluationResponse.RewardCommand}.
@@ -17,11 +18,15 @@ public class RewardIssueCommandDto {
     /** Unique per {@code (tenant, customer)} row in {@code points_ledger}; stable across HTTP retries for the same earn line. */
     private String idempotencyKey;
 
-    @NotBlank
     @Size(max = 128)
     private String sourceRuleUid;
 
-    @NotBlank
+    /** Campaign credit: set to {@code campaign_uid}; ledger {@code source_campaign_id}. */
+    @Size(max = 128)
+    private String sourceCampaignUid;
+
+    private Instant expiresAt;
+
     private String actionType = "AWARD_POINTS";
 
     @NotNull
@@ -71,5 +76,21 @@ public class RewardIssueCommandDto {
 
     public void setCommandId(String commandId) {
         this.commandId = commandId;
+    }
+
+    public String getSourceCampaignUid() {
+        return sourceCampaignUid;
+    }
+
+    public void setSourceCampaignUid(String sourceCampaignUid) {
+        this.sourceCampaignUid = sourceCampaignUid;
+    }
+
+    public Instant getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(Instant expiresAt) {
+        this.expiresAt = expiresAt;
     }
 }

@@ -21,8 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RewardReversalService {
 
-    private static final String REVOF_PREFIX = "revof:";
-
     private final PointsLedgerRepository pointsLedgerRepository;
     private final CustomerBalanceCacheRepository balanceCacheRepository;
     private final CustomerBalanceCacheSyncService customerBalanceCacheSyncService;
@@ -105,12 +103,11 @@ public class RewardReversalService {
             throw new RewardReversalValidationException("This credit has already been expired; reversal is not allowed.");
         }
 
-        String revofKey = REVOF_PREFIX + credit.getId();
-        if (pointsLedgerRepository.existsByTenantIdAndCustomerIdAndEntryTypeAndSourceCampaignId(
+        if (pointsLedgerRepository.existsByTenantIdAndCustomerIdAndEntryTypeAndReversalOfLedgerId(
             tenantId,
             customerId,
             LedgerEntryType.REVERSAL,
-            revofKey
+            credit.getId()
         )) {
             throw new RewardCreditAlreadyReversedException(
                 "This credit was already reversed under a different idempotency key."
@@ -131,7 +128,8 @@ public class RewardReversalService {
             .points(pts)
             .sourceRuleId(credit.getSourceRuleId())
             .sourceEventId(credit.getSourceEventId())
-            .sourceCampaignId(revofKey)
+            .sourceCampaignId(null)
+            .reversalOfLedgerId(credit.getId())
             .expiresAt(null)
             .description("REVERSAL of CREDIT ledger id=" + credit.getId())
             .createdBy("REWARD_ENGINE")

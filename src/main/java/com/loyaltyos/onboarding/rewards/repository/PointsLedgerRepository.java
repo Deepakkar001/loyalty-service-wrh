@@ -33,11 +33,11 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedger, Long
         String idempotencyKey
     );
 
-    boolean existsByTenantIdAndCustomerIdAndEntryTypeAndSourceCampaignId(
+    boolean existsByTenantIdAndCustomerIdAndEntryTypeAndReversalOfLedgerId(
         String tenantId,
         String customerId,
         LedgerEntryType entryType,
-        String sourceCampaignId
+        Long reversalOfLedgerId
     );
 
     @Query(
@@ -82,7 +82,7 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedger, Long
                   WHERE r.tenant_id = pl.tenant_id
                     AND r.customer_id = pl.customer_id
                     AND r.entry_type = 'REVERSAL'
-                    AND r.source_campaign_id = CONCAT('revof:', pl.id)
+                    AND r.reversal_of_ledger_id = pl.id
               )
             ORDER BY pl.id
             LIMIT :limit
@@ -113,7 +113,7 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedger, Long
                   WHERE r.tenant_id = pl.tenant_id
                     AND r.customer_id = pl.customer_id
                     AND r.entry_type = 'REVERSAL'
-                    AND r.source_campaign_id = CONCAT('revof:', pl.id)
+                    AND r.reversal_of_ledger_id = pl.id
               )
             """,
         nativeQuery = true
