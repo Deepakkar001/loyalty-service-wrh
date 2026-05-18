@@ -513,8 +513,8 @@ public class TenantRegistrationService {
             .orElseThrow(() -> new TenantNotFoundException(tenantId));
 
         OnboardingStatus status = tenant.getOnboardingStatus();
-        if (status == OnboardingStatus.ACTIVE || status == OnboardingStatus.TERMINATED) {
-            throw new IllegalStateException("Profile cannot be updated in current status.");
+        if (status == OnboardingStatus.TERMINATED) {
+            throw new IllegalStateException("Profile cannot be updated for a terminated tenant.");
         }
 
         String resolvedCategory = resolveBusinessCategory(
