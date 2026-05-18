@@ -80,7 +80,7 @@ public class SecurityConfig {
             HttpMethod.OPTIONS.name()
         ));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Location"));
+        config.setExposedHeaders(List.of("Location", "Content-Disposition"));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

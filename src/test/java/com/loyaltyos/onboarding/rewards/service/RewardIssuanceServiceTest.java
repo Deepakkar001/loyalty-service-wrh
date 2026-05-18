@@ -10,6 +10,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.loyaltyos.onboarding.analytics.service.TierHistoryService;
+import com.loyaltyos.onboarding.analytics.service.TierResolver;
 import com.loyaltyos.onboarding.rules.entity.EarnRule;
 import com.loyaltyos.onboarding.rules.entity.PointsLedger;
 import com.loyaltyos.onboarding.rules.enums.LedgerEntryType;
@@ -50,6 +52,12 @@ class RewardIssuanceServiceTest {
 
     @Mock
     private RewardEngineProperties rewardEngineProperties;
+
+    @Mock
+    private TierResolver tierResolver;
+
+    @Mock
+    private TierHistoryService tierHistoryService;
 
     @InjectMocks
     private RewardIssuanceService service;

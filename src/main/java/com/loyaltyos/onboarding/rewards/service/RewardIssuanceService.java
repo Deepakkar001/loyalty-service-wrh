@@ -1,5 +1,7 @@
 package com.loyaltyos.onboarding.rewards.service;
 
+import com.loyaltyos.onboarding.analytics.service.TierHistoryService;
+import com.loyaltyos.onboarding.analytics.service.TierResolver;
 import com.loyaltyos.onboarding.rules.entity.EarnRule;
 import com.loyaltyos.onboarding.rules.entity.PointsLedger;
 import com.loyaltyos.onboarding.rules.enums.ActionType;
@@ -42,19 +44,25 @@ public class RewardIssuanceService {
     private final EarnRuleRepository earnRuleRepository;
     private final RewardIssuanceAuditService rewardIssuanceAuditService;
     private final RewardEngineProperties rewardEngineProperties;
+    private final TierResolver tierResolver;
+    private final TierHistoryService tierHistoryService;
 
     public RewardIssuanceService(
         PointsLedgerRepository pointsLedgerRepository,
         CustomerBalanceCacheRepository balanceCacheRepository,
         EarnRuleRepository earnRuleRepository,
         RewardIssuanceAuditService rewardIssuanceAuditService,
-        RewardEngineProperties rewardEngineProperties
+        RewardEngineProperties rewardEngineProperties,
+        TierResolver tierResolver,
+        TierHistoryService tierHistoryService
     ) {
         this.pointsLedgerRepository = Objects.requireNonNull(pointsLedgerRepository, "pointsLedgerRepository");
         this.balanceCacheRepository = Objects.requireNonNull(balanceCacheRepository, "balanceCacheRepository");
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.rewardIssuanceAuditService = Objects.requireNonNull(rewardIssuanceAuditService, "rewardIssuanceAuditService");
         this.rewardEngineProperties = Objects.requireNonNull(rewardEngineProperties, "rewardEngineProperties");
+        this.tierResolver = Objects.requireNonNull(tierResolver, "tierResolver");
+        this.tierHistoryService = Objects.requireNonNull(tierHistoryService, "tierHistoryService");
     }
 
     @Transactional(readOnly = true)
@@ -184,7 +192,21 @@ public class RewardIssuanceService {
             List<PointsLedger> saved = pointsLedgerRepository.saveAll(toSave);
             pointsLedgerRepository.flush();
 
+            BigDecimal balanceBefore = readBalance(tenantId, programmeUid, customerId);
+            var previousTier = tierResolver.resolveTierForBalance(tenantId, programmeUid, balanceBefore);
+
             balanceCacheRepository.incrementBalance(tenantId, programmeUid, customerId, total);
+
+            BigDecimal balanceAfter = balanceBefore.add(total);
+            var newTier = tierResolver.resolveTierForBalance(tenantId, programmeUid, balanceAfter);
+            tierHistoryService.recordIfTierChanged(
+                tenantId,
+                programmeUid,
+                customerId,
+                previousTier,
+                newTier,
+                balanceAfter
+            );
 
             Map<String, RewardIssueCommandDto> byKey = new HashMap<>();
             for (RewardIssueCommandDto c : commands) {
