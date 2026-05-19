@@ -10,6 +10,8 @@ public class EarnRuleDetailResponse {
     private Long id;
     private String tenantId;
     private String programmeUid;
+    private String ruleType;
+    private String campaignUid;
     private String ruleUid;
     private String name;
     private String description;
@@ -81,6 +83,8 @@ public class EarnRuleDetailResponse {
         Long id,
         String tenantId,
         String programmeUid,
+        String ruleType,
+        String campaignUid,
         String ruleUid,
         String name,
         String description,
@@ -100,6 +104,8 @@ public class EarnRuleDetailResponse {
         this.id = id;
         this.tenantId = tenantId;
         this.programmeUid = programmeUid;
+        this.ruleType = ruleType;
+        this.campaignUid = campaignUid;
         this.ruleUid = ruleUid;
         this.name = name;
         this.description = description;
@@ -123,6 +129,8 @@ public class EarnRuleDetailResponse {
         private Long id;
         private String tenantId;
         private String programmeUid;
+        private String ruleType;
+        private String campaignUid;
         private String ruleUid;
         private String name;
         private String description;
@@ -144,6 +152,8 @@ public class EarnRuleDetailResponse {
         public Builder id(Long id) { this.id = id; return this; }
         public Builder tenantId(String tenantId) { this.tenantId = tenantId; return this; }
         public Builder programmeUid(String programmeUid) { this.programmeUid = programmeUid; return this; }
+        public Builder ruleType(String ruleType) { this.ruleType = ruleType; return this; }
+        public Builder campaignUid(String campaignUid) { this.campaignUid = campaignUid; return this; }
         public Builder ruleUid(String ruleUid) { this.ruleUid = ruleUid; return this; }
         public Builder name(String name) { this.name = name; return this; }
         public Builder description(String description) { this.description = description; return this; }
@@ -162,7 +172,7 @@ public class EarnRuleDetailResponse {
 
         public EarnRuleDetailResponse build() {
             return new EarnRuleDetailResponse(
-                id, tenantId, programmeUid, ruleUid, name, description, priority, status,
+                id, tenantId, programmeUid, ruleType, campaignUid, ruleUid, name, description, priority, status,
                 triggerEventType, executionMode, effectiveAt, endAt, createdAt, updatedAt,
                 activatedAt, archivedAt, conditionTree, actions
             );
@@ -175,6 +185,10 @@ public class EarnRuleDetailResponse {
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getProgrammeUid() { return programmeUid; }
     public void setProgrammeUid(String programmeUid) { this.programmeUid = programmeUid; }
+    public String getRuleType() { return ruleType; }
+    public void setRuleType(String ruleType) { this.ruleType = ruleType; }
+    public String getCampaignUid() { return campaignUid; }
+    public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
     public String getRuleUid() { return ruleUid; }
     public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
     public String getName() { return name; }

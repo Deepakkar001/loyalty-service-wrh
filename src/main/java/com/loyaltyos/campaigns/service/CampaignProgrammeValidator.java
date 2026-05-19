@@ -3,6 +3,7 @@ package com.loyaltyos.campaigns.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
+import com.loyaltyos.campaigns.util.TriggerEventTypes;
 import com.loyaltyos.campaigns.model.CampaignAwardType;
 import com.loyaltyos.campaigns.model.CampaignOfferConfig;
 import com.loyaltyos.campaigns.model.CampaignTargetSegment;
@@ -52,43 +53,24 @@ public class CampaignProgrammeValidator {
         }
     }
 
+  /** Tenant-defined event types (comma-separated) — not validated against programme event schema. */
     public void validateTriggerEventType(String tenantId, String programmeUid, String triggerEventType) {
-        if (triggerEventType == null || triggerEventType.isBlank()) {
-            throw new CampaignBadRequestException("triggerEventType is required");
-        }
-        String normalized = triggerEventType.trim();
-        if (normalized.length() > 64) {
-            throw new CampaignBadRequestException("triggerEventType exceeds 64 characters");
-        }
-
-        ProgrammeConfig cfg = programmeService.getActiveConfigOrNull(tenantId, programmeUid);
-        if (cfg == null || cfg.getConfigJson() == null || cfg.getConfigJson().isBlank()) {
-            return;
-        }
         try {
-            JsonNode root = objectMapper.readTree(cfg.getConfigJson());
-            Set<String> allowed = extractConfiguredEventTypes(root);
-            if (!allowed.isEmpty() && !matchesConfiguredEventType(allowed, normalized)) {
-                throw new CampaignBadRequestException(
-                    "triggerEventType '" + normalized + "' is not defined in programme eventSchema. Allowed: " + allowed
-                );
-            }
-        } catch (CampaignBadRequestException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new CampaignBadRequestException("Unable to validate triggerEventType against programme config");
+            TriggerEventTypes.validateSerialized(triggerEventType);
+        } catch (IllegalArgumentException e) {
+            throw new CampaignBadRequestException(e.getMessage());
         }
     }
 
+    /** Tier UIDs must exist in tenant {@code tier_definitions}. */
     public void validateTierUids(String tenantId, String programmeUid, CampaignTargetSegment segment) {
         if (segment == null || segment.tierUids() == null || segment.tierUids().isEmpty()) {
             return;
         }
-        Set<String> valid = resolveAllowedTierUids(tenantId, programmeUid);
+        Set<String> valid = resolveAllowedTierUids(tenantId);
         if (valid.isEmpty()) {
             throw new CampaignBadRequestException(
-                "No tier definitions found for programme '" + programmeUid
-                    + "'. Configure tiers in programme settings before using tier targeting."
+                "No tier definitions found for this tenant. Configure tiers before using tier targeting."
             );
         }
         for (String uid : segment.tierUids()) {
@@ -96,7 +78,7 @@ public class CampaignProgrammeValidator {
                 continue;
             }
             if (!valid.contains(uid.trim())) {
-                throw new CampaignBadRequestException("Unknown tierUid for programme: " + uid);
+                throw new CampaignBadRequestException("Unknown tierUid: " + uid);
             }
         }
     }
@@ -135,14 +117,13 @@ public class CampaignProgrammeValidator {
      * Resolves tier rows for campaign validation. Programme-scoped rows are preferred; legacy onboarding
      * may persist tiers with a null programme_uid (treated as tenant-wide for the default programme).
      */
-    Set<String> resolveAllowedTierUids(String tenantId, String programmeUid) {
+    Set<String> resolveAllowedTierUids(String tenantId) {
         Set<String> valid = new HashSet<>();
-        for (TierDefinition td : resolveTierDefinitions(tenantId, programmeUid)) {
+        for (TierDefinition td : tierDefinitionRepository.findByTenantIdOrderByRankOrderAsc(tenantId)) {
             if (td.getTierUid() != null && !td.getTierUid().isBlank()) {
                 valid.add(td.getTierUid().trim());
             }
         }
-        valid.addAll(extractConfiguredTierUidsFromProgramme(tenantId, programmeUid));
         return valid;
     }
 

@@ -52,10 +52,11 @@ public class RuleAdminController {
     @GetMapping("/rules")
     public ResponseEntity<List<EarnRuleResponse>> listRules(
         @AuthenticationPrincipal Jwt jwt,
-        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam(value = "ruleType", required = false) String ruleType
     ) {
         String tenantId = requireTenant(jwt);
-        return ResponseEntity.ok(earnRuleAdminService.listRules(tenantId, programmeUid));
+        return ResponseEntity.ok(earnRuleAdminService.listRules(tenantId, programmeUid, ruleType));
     }
 
     @GetMapping("/rules/{ruleUid}")

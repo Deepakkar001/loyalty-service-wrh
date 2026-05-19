@@ -49,7 +49,10 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
               AND c.status = 'ACTIVE'
               AND c.valid_from <= :now
               AND c.valid_until >= :now
-              AND c.trigger_event_type = :eventType
+              AND (
+                c.trigger_event_type = :eventType
+                OR FIND_IN_SET(:eventType, REPLACE(c.trigger_event_type, ' ', '')) > 0
+              )
             ORDER BY c.priority DESC
             """,
         nativeQuery = true

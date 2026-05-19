@@ -2,6 +2,7 @@ package com.loyaltyos.onboarding.rules.entity;
 
 import com.loyaltyos.onboarding.rules.enums.ExecutionMode;
 import com.loyaltyos.onboarding.rules.enums.RuleStatus;
+import com.loyaltyos.onboarding.rules.enums.RuleType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,6 +47,13 @@ public class EarnRule {
 
     @Column(name = "programme_uid", nullable = false, length = 64)
     private String programmeUid = "default";
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rule_type", nullable = false, length = 32)
+    private RuleType ruleType = RuleType.PROGRAMME;
+
+    @Column(name = "campaign_uid", length = 128)
+    private String campaignUid;
 
     @Column(name = "rule_uid", nullable = false, length = 128)
     private String ruleUid;
@@ -103,6 +111,8 @@ public class EarnRule {
         Long id,
         String tenantId,
         String programmeUid,
+        RuleType ruleType,
+        String campaignUid,
         String ruleUid,
         String name,
         String description,
@@ -122,6 +132,8 @@ public class EarnRule {
         this.id = id;
         this.tenantId = tenantId;
         this.programmeUid = (programmeUid == null || programmeUid.isBlank()) ? "default" : programmeUid;
+        this.ruleType = ruleType != null ? ruleType : RuleType.PROGRAMME;
+        this.campaignUid = campaignUid;
         this.ruleUid = ruleUid;
         this.name = name;
         this.description = description;
@@ -145,6 +157,8 @@ public class EarnRule {
         private Long id;
         private String tenantId;
         private String programmeUid = "default";
+        private RuleType ruleType = RuleType.PROGRAMME;
+        private String campaignUid;
         private String ruleUid;
         private String name;
         private String description;
@@ -166,6 +180,8 @@ public class EarnRule {
         public Builder id(Long id) { this.id = id; return this; }
         public Builder tenantId(String tenantId) { this.tenantId = tenantId; return this; }
         public Builder programmeUid(String programmeUid) { this.programmeUid = programmeUid; return this; }
+        public Builder ruleType(RuleType ruleType) { this.ruleType = ruleType; return this; }
+        public Builder campaignUid(String campaignUid) { this.campaignUid = campaignUid; return this; }
         public Builder ruleUid(String ruleUid) { this.ruleUid = ruleUid; return this; }
         public Builder name(String name) { this.name = name; return this; }
         public Builder description(String description) { this.description = description; return this; }
@@ -184,7 +200,7 @@ public class EarnRule {
 
         public EarnRule build() {
             return new EarnRule(
-                id, tenantId, programmeUid, ruleUid, name, description, priority, status,
+                id, tenantId, programmeUid, ruleType, campaignUid, ruleUid, name, description, priority, status,
                 triggerEventType, executionMode, effectiveAt, endAt, createdAt, updatedAt,
                 activatedAt, archivedAt, condition, actions
             );
@@ -197,6 +213,10 @@ public class EarnRule {
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getProgrammeUid() { return programmeUid; }
     public void setProgrammeUid(String programmeUid) { this.programmeUid = programmeUid; }
+    public RuleType getRuleType() { return ruleType; }
+    public void setRuleType(RuleType ruleType) { this.ruleType = ruleType; }
+    public String getCampaignUid() { return campaignUid; }
+    public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
     public String getRuleUid() { return ruleUid; }
     public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
     public String getName() { return name; }

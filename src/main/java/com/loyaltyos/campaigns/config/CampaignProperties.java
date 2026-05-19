@@ -30,7 +30,9 @@ public class CampaignProperties {
 
     private long exhaustedFixedDelayMs = 300_000L;
 
+    private boolean expiredJobEnabled = true;
 
+    private long expiredFixedDelayMs = 300_000L;
 
     public boolean isEnabled() {
 
@@ -156,6 +158,22 @@ public class CampaignProperties {
 
         this.exhaustedFixedDelayMs = exhaustedFixedDelayMs;
 
+    }
+
+    public boolean isExpiredJobEnabled() {
+        return expiredJobEnabled;
+    }
+
+    public void setExpiredJobEnabled(boolean expiredJobEnabled) {
+        this.expiredJobEnabled = expiredJobEnabled;
+    }
+
+    public long getExpiredFixedDelayMs() {
+        return expiredFixedDelayMs;
+    }
+
+    public void setExpiredFixedDelayMs(long expiredFixedDelayMs) {
+        this.expiredFixedDelayMs = expiredFixedDelayMs;
     }
 
 }

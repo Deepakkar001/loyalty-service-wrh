@@ -14,6 +14,12 @@ public class RuleUpsertRequest {
 
     private String programmeUid;
 
+    /** PROGRAMME (default) or CAMPAIGN. */
+    private String ruleType;
+
+    /** Required when ruleType is CAMPAIGN. */
+    private String campaignUid;
+
     /** Optional; generated when absent on create. */
     private String ruleUid;
 
@@ -69,6 +75,10 @@ public class RuleUpsertRequest {
 
     public String getProgrammeUid() { return programmeUid; }
     public void setProgrammeUid(String programmeUid) { this.programmeUid = programmeUid; }
+    public String getRuleType() { return ruleType; }
+    public void setRuleType(String ruleType) { this.ruleType = ruleType; }
+    public String getCampaignUid() { return campaignUid; }
+    public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
     public String getRuleUid() { return ruleUid; }
     public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
     public String getName() { return name; }

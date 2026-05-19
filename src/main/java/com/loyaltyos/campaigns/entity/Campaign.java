@@ -72,7 +72,7 @@ public class Campaign {
     @Column(name = "eligibility_rules", columnDefinition = "JSON")
     private JsonNode eligibilityRules;
 
-    @Column(name = "trigger_event_type", length = 64)
+    @Column(name = "trigger_event_type", length = 512)
     private String triggerEventType;
 
     @JdbcTypeCode(SqlTypes.JSON)

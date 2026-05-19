@@ -17,6 +17,7 @@ import com.loyaltyos.campaigns.model.CampaignOfferConfig;
 import com.loyaltyos.campaigns.model.CampaignTargetSegment;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
+import com.loyaltyos.campaigns.util.TriggerEventTypes;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -63,7 +64,7 @@ public class CampaignService {
     @Transactional
     public CampaignResponse create(String tenantId, CampaignUpsertRequest req, String actorId) {
         assertCampaignsEnabled();
-        String programmeUid = programmeValidator.requireProgrammeUid(req.getProgrammeUid());
+        String programmeUid = defaultProgrammeUid(req.getProgrammeUid());
         programmeValidator.assertProgrammeExists(tenantId, programmeUid);
         validateUpsert(tenantId, programmeUid, req);
 
@@ -132,6 +133,9 @@ public class CampaignService {
     public CampaignResponse activate(String tenantId, String campaignUid) {
         assertCampaignsEnabled();
         Campaign c = loadCampaign(tenantId, campaignUid);
+        if (c.getStatus() == CampaignStatus.EXPIRED) {
+            throw new CampaignConflictException("Cannot activate an expired campaign");
+        }
         if (c.getStatus() != CampaignStatus.DRAFT && c.getStatus() != CampaignStatus.PAUSED) {
             throw new CampaignConflictException("Cannot activate campaign in status " + c.getStatus());
         }
@@ -158,7 +162,7 @@ public class CampaignService {
     public CampaignResponse end(String tenantId, String campaignUid) {
         assertCampaignsEnabled();
         Campaign c = loadCampaign(tenantId, campaignUid);
-        if (c.getStatus() == CampaignStatus.ENDED || c.getStatus() == CampaignStatus.EXHAUSTED) {
+        if (isTerminalStatus(c.getStatus())) {
             throw new CampaignConflictException("Campaign is already terminal: " + c.getStatus());
         }
         c.setStatus(CampaignStatus.ENDED);
@@ -199,11 +203,15 @@ public class CampaignService {
     private void applyUpsert(Campaign c, CampaignUpsertRequest req, String actorId) {
         c.setName(req.getName().trim());
         c.setDescription(req.getDescription());
-        c.setCampaignType(req.getCampaignType().trim());
+        c.setCampaignType(
+            req.getCampaignType() == null || req.getCampaignType().isBlank()
+                ? "STANDARD"
+                : req.getCampaignType().trim()
+        );
         c.setOccasionTags(toJsonArray(req.getOccasionTags()));
         c.setTargetSegment(toJson(req.getTargetSegment()));
         c.setEligibilityRules(objectMapper.createObjectNode());
-        c.setTriggerEventType(req.getTriggerEventType().trim());
+        c.setTriggerEventType(TriggerEventTypes.normalize(req.getTriggerEventType()));
         c.setOfferConfig(toJson(req.getOfferConfig()));
         c.setMutualExclGroup(blankToNull(req.getMutualExclGroup()));
         c.setStackMode(parseStackMode(req.getStackMode()));
@@ -308,6 +316,19 @@ public class CampaignService {
         r.setUpdatedAt(c.getUpdatedAt());
         r.setBudgetExceedsApprovalThreshold(exceedsThreshold);
         return r;
+    }
+
+    private static String defaultProgrammeUid(String programmeUid) {
+        if (programmeUid == null || programmeUid.isBlank()) {
+            return "default";
+        }
+        return programmeUid.trim();
+    }
+
+    private static boolean isTerminalStatus(CampaignStatus status) {
+        return status == CampaignStatus.ENDED
+            || status == CampaignStatus.EXHAUSTED
+            || status == CampaignStatus.EXPIRED;
     }
 
     private static BigDecimal consumedPct(BigDecimal consumed, BigDecimal total) {
