@@ -11,6 +11,9 @@ public class CachedRuleSnapshot {
     private String name;
     private int priority;
     private String executionMode;
+    private String ruleType;
+    private String campaignUid;
+    private String triggerEventType;
     private JsonNode conditionTree;
     private List<CachedActionSnapshot> actions = new ArrayList<>();
 
@@ -22,6 +25,9 @@ public class CachedRuleSnapshot {
         String name,
         int priority,
         String executionMode,
+        String ruleType,
+        String campaignUid,
+        String triggerEventType,
         JsonNode conditionTree,
         List<CachedActionSnapshot> actions
     ) {
@@ -30,6 +36,9 @@ public class CachedRuleSnapshot {
         this.name = name;
         this.priority = priority;
         this.executionMode = executionMode;
+        this.ruleType = ruleType;
+        this.campaignUid = campaignUid;
+        this.triggerEventType = triggerEventType;
         this.conditionTree = conditionTree;
         this.actions = actions != null ? actions : new ArrayList<>();
     }
@@ -42,6 +51,9 @@ public class CachedRuleSnapshot {
         private String name;
         private int priority;
         private String executionMode;
+        private String ruleType;
+        private String campaignUid;
+        private String triggerEventType;
         private JsonNode conditionTree;
         private List<CachedActionSnapshot> actions = new ArrayList<>();
 
@@ -52,11 +64,16 @@ public class CachedRuleSnapshot {
         public Builder name(String name) { this.name = name; return this; }
         public Builder priority(int priority) { this.priority = priority; return this; }
         public Builder executionMode(String executionMode) { this.executionMode = executionMode; return this; }
+        public Builder ruleType(String ruleType) { this.ruleType = ruleType; return this; }
+        public Builder campaignUid(String campaignUid) { this.campaignUid = campaignUid; return this; }
+        public Builder triggerEventType(String triggerEventType) { this.triggerEventType = triggerEventType; return this; }
         public Builder conditionTree(JsonNode conditionTree) { this.conditionTree = conditionTree; return this; }
         public Builder actions(List<CachedActionSnapshot> actions) { this.actions = actions != null ? actions : new ArrayList<>(); return this; }
 
         public CachedRuleSnapshot build() {
-            return new CachedRuleSnapshot(ruleDbId, ruleUid, name, priority, executionMode, conditionTree, actions);
+            return new CachedRuleSnapshot(
+                ruleDbId, ruleUid, name, priority, executionMode, ruleType, campaignUid, triggerEventType, conditionTree, actions
+            );
         }
     }
 
@@ -70,6 +87,12 @@ public class CachedRuleSnapshot {
     public void setPriority(int priority) { this.priority = priority; }
     public String getExecutionMode() { return executionMode; }
     public void setExecutionMode(String executionMode) { this.executionMode = executionMode; }
+    public String getRuleType() { return ruleType; }
+    public void setRuleType(String ruleType) { this.ruleType = ruleType; }
+    public String getCampaignUid() { return campaignUid; }
+    public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
+    public String getTriggerEventType() { return triggerEventType; }
+    public void setTriggerEventType(String triggerEventType) { this.triggerEventType = triggerEventType; }
     public JsonNode getConditionTree() { return conditionTree; }
     public void setConditionTree(JsonNode conditionTree) { this.conditionTree = conditionTree; }
     public List<CachedActionSnapshot> getActions() { return actions; }

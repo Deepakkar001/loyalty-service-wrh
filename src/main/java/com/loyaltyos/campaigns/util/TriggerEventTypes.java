@@ -52,10 +52,16 @@ public final class TriggerEventTypes {
      */
     public static String resolveSingleForCampaignRule(String campaignStored, String candidateRaw) {
         List<String> allowed = parse(campaignStored);
-        if (allowed.isEmpty()) {
-            throw new IllegalArgumentException("Campaign has no event types configured");
-        }
         List<String> candidateParts = parse(candidateRaw);
+        if (allowed.isEmpty()) {
+            if (candidateParts.isEmpty()) {
+                throw new IllegalArgumentException("triggerEventType is required");
+            }
+            if (candidateParts.size() > 1) {
+                throw new IllegalArgumentException("Campaign rules must use a single event type");
+            }
+            return candidateParts.get(0);
+        }
         if (candidateParts.isEmpty()) {
             throw new IllegalArgumentException("triggerEventType is required");
         }

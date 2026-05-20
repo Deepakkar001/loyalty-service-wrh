@@ -62,6 +62,14 @@ public class CampaignProgrammeValidator {
         }
     }
 
+    /** Allows empty trigger list on create/update; event types are added via rules or event schema. */
+    public void validateTriggerEventTypeIfPresent(String tenantId, String programmeUid, String triggerEventType) {
+        if (triggerEventType == null || triggerEventType.isBlank()) {
+            return;
+        }
+        validateTriggerEventType(tenantId, programmeUid, triggerEventType);
+    }
+
     /** Tier UIDs must exist in tenant {@code tier_definitions}. */
     public void validateTierUids(String tenantId, String programmeUid, CampaignTargetSegment segment) {
         if (segment == null || segment.tierUids() == null || segment.tierUids().isEmpty()) {

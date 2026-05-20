@@ -17,6 +17,7 @@ import com.loyaltyos.onboarding.rules.enums.ExecutionMode;
 import com.loyaltyos.onboarding.rules.enums.RuleChangeType;
 import com.loyaltyos.onboarding.rules.enums.RuleStatus;
 import com.loyaltyos.onboarding.rules.enums.RuleType;
+import java.util.Set;
 import com.loyaltyos.campaigns.entity.Campaign;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.util.TriggerEventTypes;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @SuppressWarnings("null")
@@ -72,9 +74,15 @@ public class EarnRuleAdminService {
     public EarnRuleResponse createRule(String tenantId, String programmeUid, RuleUpsertRequest req, String actorId) {
         RuleLinkage linkage = resolveRuleLinkage(tenantId, programmeUid, req);
         programmeUid = linkage.programmeUid();
-        ProgrammeEvaluationContext ctx = programmeRuleContextLoader.load(tenantId, programmeUid, null);
+        Set<String> eventAllowlist = programmeRuleContextLoader.resolveAllowedEventPropertyNames(
+            tenantId,
+            linkage.ruleType(),
+            linkage.campaignUid(),
+            programmeUid,
+            req.getTriggerEventType()
+        );
         try {
-            conditionTreeParser.parseConditionTree(req.getConditionTree(), ctx.getAllowedEventPropertyNames());
+            conditionTreeParser.parseConditionTree(req.getConditionTree(), eventAllowlist);
         } catch (ConditionParseException e) {
             throw new RuleEngineBadRequestException(e.getMessage());
         }
@@ -151,11 +159,17 @@ public class EarnRuleAdminService {
             throw new RuleEngineBadRequestException("Cannot update an archived rule; unarchive via status first");
         }
 
-        resolveRuleLinkage(tenantId, programmeUid, req);
+        RuleLinkage linkage = resolveRuleLinkage(tenantId, programmeUid, req);
 
-        ProgrammeEvaluationContext ctx = programmeRuleContextLoader.load(tenantId, programmeUid, null);
+        Set<String> eventAllowlist = programmeRuleContextLoader.resolveAllowedEventPropertyNames(
+            tenantId,
+            linkage.ruleType(),
+            linkage.campaignUid(),
+            programmeUid,
+            req.getTriggerEventType()
+        );
         try {
-            conditionTreeParser.parseConditionTree(req.getConditionTree(), ctx.getAllowedEventPropertyNames());
+            conditionTreeParser.parseConditionTree(req.getConditionTree(), eventAllowlist);
         } catch (ConditionParseException e) {
             throw new RuleEngineBadRequestException(e.getMessage());
         }
@@ -276,16 +290,62 @@ public class EarnRuleAdminService {
     @Transactional(readOnly = true)
     public List<EarnRuleResponse> listRules(String tenantId, String programmeUid, String ruleTypeFilter) {
         RuleType filter = parseRuleTypeFilter(ruleTypeFilter);
-        return earnRuleRepository.findByTenantIdAndProgrammeUidOrderByPriorityDesc(tenantId, programmeUid)
-            .stream()
+        List<EarnRule> rules = isAllProgrammesScope(programmeUid)
+            ? earnRuleRepository.findByTenantIdOrderByPriorityDesc(tenantId)
+            : loadRulesForProgrammeScope(tenantId, programmeUid.trim());
+        return rules.stream()
             .filter(r -> filter == null || r.getRuleType() == filter)
             .map(EarnRuleAdminService::toResponse)
             .toList();
     }
 
+    /**
+     * Programme-scoped list without cross-table string joins (avoids MySQL collation mismatches
+     * between {@code earn_rules} and {@code campaigns}).
+     */
+    private List<EarnRule> loadRulesForProgrammeScope(String tenantId, String programmeUid) {
+        Map<Long, EarnRule> byId = new LinkedHashMap<>();
+        for (EarnRule rule : earnRuleRepository.findByTenantIdAndProgrammeUidOrderByPriorityDesc(tenantId, programmeUid)) {
+            byId.put(rule.getId(), rule);
+        }
+
+        List<String> campaignUids = campaignRepository
+            .findByTenantIdAndProgrammeUidOrderByPriorityDescCreatedAtDesc(tenantId, programmeUid)
+            .stream()
+            .map(Campaign::getCampaignUid)
+            .filter(uid -> uid != null && !uid.isBlank())
+            .distinct()
+            .collect(Collectors.toList());
+
+        if (!campaignUids.isEmpty()) {
+            for (EarnRule rule : earnRuleRepository.findByTenantIdAndRuleTypeAndCampaignUidInOrderByPriorityDesc(
+                tenantId,
+                RuleType.CAMPAIGN,
+                campaignUids
+            )) {
+                byId.putIfAbsent(rule.getId(), rule);
+            }
+        }
+
+        return byId.values().stream()
+            .sorted((a, b) -> Integer.compare(
+                b.getPriority() != null ? b.getPriority() : 0,
+                a.getPriority() != null ? a.getPriority() : 0
+            ))
+            .toList();
+    }
+
+    private static boolean isAllProgrammesScope(String programmeUid) {
+        if (programmeUid == null || programmeUid.isBlank()) {
+            return false;
+        }
+        return "ALL".equalsIgnoreCase(programmeUid.trim());
+    }
+
     @Transactional(readOnly = true)
     public EarnRuleDetailResponse getRule(String tenantId, String programmeUid, String ruleUid) {
         EarnRule rule = earnRuleRepository.loadForAdminEdit(tenantId, programmeUid, ruleUid)
+            .or(() -> earnRuleRepository.loadForAdminEditByRuleUid(tenantId, ruleUid))
             .orElseThrow(() -> new RuleEngineBadRequestException("Rule not found: " + ruleUid));
         return toDetailResponse(rule);
     }

@@ -19,6 +19,7 @@ public class CampaignResponse {
     private JsonNode targetSegment;
     private JsonNode eligibilityRules;
     private String triggerEventType;
+    private JsonNode eventSchema;
     private JsonNode offerConfig;
     private String mutualExclGroup;
     private StackMode stackMode;
@@ -61,6 +62,8 @@ public class CampaignResponse {
     public void setEligibilityRules(JsonNode eligibilityRules) { this.eligibilityRules = eligibilityRules; }
     public String getTriggerEventType() { return triggerEventType; }
     public void setTriggerEventType(String triggerEventType) { this.triggerEventType = triggerEventType; }
+    public JsonNode getEventSchema() { return eventSchema; }
+    public void setEventSchema(JsonNode eventSchema) { this.eventSchema = eventSchema; }
     public JsonNode getOfferConfig() { return offerConfig; }
     public void setOfferConfig(JsonNode offerConfig) { this.offerConfig = offerConfig; }
     public String getMutualExclGroup() { return mutualExclGroup; }

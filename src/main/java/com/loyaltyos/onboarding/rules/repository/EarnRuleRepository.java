@@ -2,6 +2,7 @@ package com.loyaltyos.onboarding.rules.repository;
 
 import com.loyaltyos.onboarding.rules.entity.EarnRule;
 import com.loyaltyos.onboarding.rules.enums.RuleStatus;
+import com.loyaltyos.onboarding.rules.enums.RuleType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -49,4 +50,24 @@ public interface EarnRuleRepository extends JpaRepository<EarnRule, Long> {
     );
 
     List<EarnRule> findByTenantIdAndProgrammeUidOrderByPriorityDesc(String tenantId, String programmeUid);
+
+    List<EarnRule> findByTenantIdOrderByPriorityDesc(String tenantId);
+
+    List<EarnRule> findByTenantIdAndRuleTypeAndCampaignUidInOrderByPriorityDesc(
+        String tenantId,
+        RuleType ruleType,
+        List<String> campaignUids
+    );
+
+    @Query("""
+        select distinct r from EarnRule r
+        left join fetch r.actions
+        left join fetch r.condition
+        where r.tenantId = :tenantId
+          and r.ruleUid = :ruleUid
+        """)
+    Optional<EarnRule> loadForAdminEditByRuleUid(
+        @Param("tenantId") String tenantId,
+        @Param("ruleUid") String ruleUid
+    );
 }

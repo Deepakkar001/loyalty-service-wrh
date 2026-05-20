@@ -54,10 +54,6 @@ dependencies {
     // Email (SMTP)
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 
-    // Flyway (database migrations)
-    implementation 'org.flywaydb:flyway-core'
-    implementation 'org.flywaydb:flyway-mysql'
-
     // API Documentation
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 

@@ -76,6 +76,10 @@ public class Campaign {
     private String triggerEventType;
 
     @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "event_schema", columnDefinition = "JSON")
+    private JsonNode eventSchema;
+
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "offer_config", nullable = false, columnDefinition = "JSON")
     private JsonNode offerConfig;
 
@@ -153,6 +157,8 @@ public class Campaign {
     public void setEligibilityRules(JsonNode eligibilityRules) { this.eligibilityRules = eligibilityRules; }
     public String getTriggerEventType() { return triggerEventType; }
     public void setTriggerEventType(String triggerEventType) { this.triggerEventType = triggerEventType; }
+    public JsonNode getEventSchema() { return eventSchema; }
+    public void setEventSchema(JsonNode eventSchema) { this.eventSchema = eventSchema; }
     public JsonNode getOfferConfig() { return offerConfig; }
     public void setOfferConfig(JsonNode offerConfig) { this.offerConfig = offerConfig; }
     public String getMutualExclGroup() { return mutualExclGroup; }

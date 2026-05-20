@@ -2,9 +2,13 @@ package com.loyaltyos.onboarding.rules.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.loyaltyos.campaigns.entity.Campaign;
+import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.onboarding.domain.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.domain.entity.TierDefinition;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
+import com.loyaltyos.onboarding.rules.enums.RuleType;
+import com.loyaltyos.onboarding.service.EventSchemaJsonSupport;
 import com.loyaltyos.onboarding.service.ProgrammeService;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
@@ -20,16 +24,70 @@ public class ProgrammeRuleContextLoader {
 
     private final ProgrammeService programmeService;
     private final TierDefinitionRepository tierDefinitionRepository;
+    private final CampaignRepository campaignRepository;
     private final ObjectMapper objectMapper;
 
     public ProgrammeRuleContextLoader(
         ProgrammeService programmeService,
         TierDefinitionRepository tierDefinitionRepository,
+        CampaignRepository campaignRepository,
         ObjectMapper objectMapper
     ) {
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
         this.tierDefinitionRepository = Objects.requireNonNull(tierDefinitionRepository, "tierDefinitionRepository");
+        this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+    }
+
+    /**
+     * Allowed {@code event.*} property names for rule validation / evaluation.
+     * Campaign rules use per-campaign schema for the rule trigger; programme rules use programme-wide union.
+     */
+    public Set<String> resolveAllowedEventPropertyNames(
+        String tenantId,
+        RuleType ruleType,
+        String campaignUid,
+        String programmeUid,
+        String triggerEventType
+    ) {
+        if (ruleType == RuleType.CAMPAIGN && campaignUid != null && !campaignUid.isBlank()) {
+            return campaignRepository.findByTenantIdAndCampaignUid(tenantId, campaignUid.trim())
+                .map(c -> allowlistForCampaign(c, triggerEventType))
+                .orElse(Set.of());
+        }
+        try {
+            ProgrammeConfig cfg = programmeService.getActiveConfigOrNull(tenantId, programmeUid);
+            if (cfg == null || cfg.getConfigJson() == null || cfg.getConfigJson().isBlank()) {
+                return Set.of();
+            }
+            JsonNode root = objectMapper.readTree(cfg.getConfigJson());
+            return extractEventFieldAllowlist(root);
+        } catch (Exception e) {
+            return Set.of();
+        }
+    }
+
+    private Set<String> allowlistForCampaign(Campaign campaign, String triggerEventType) {
+        JsonNode schema = campaign.getEventSchema();
+        if (schema != null && !schema.isNull() && !schema.isMissingNode()) {
+            Set<String> strict = EventSchemaJsonSupport.extractEventFieldAllowlistForTrigger(schema, triggerEventType);
+            if (!strict.isEmpty()) {
+                return strict;
+            }
+        }
+        String prog = campaign.getProgrammeUid() != null && !campaign.getProgrammeUid().isBlank()
+            ? campaign.getProgrammeUid()
+            : "default";
+        try {
+            ProgrammeConfig cfg = programmeService.getActiveConfigOrNull(campaign.getTenantId(), prog);
+            if (cfg == null || cfg.getConfigJson() == null || cfg.getConfigJson().isBlank()) {
+                return Set.of();
+            }
+            JsonNode root = objectMapper.readTree(cfg.getConfigJson());
+            return EventSchemaJsonSupport.extractEventFieldAllowlistForTrigger(root.path("eventSchema"), triggerEventType);
+        } catch (Exception e) {
+            return Set.of();
+        }
     }
 
     public ProgrammeEvaluationContext load(String tenantId, String programmeUid, String customerTierUid) {

@@ -11,6 +11,8 @@ import com.loyaltyos.onboarding.rules.entity.EarnRule;
 import com.loyaltyos.onboarding.rules.enums.ActionType;
 import com.loyaltyos.onboarding.rules.enums.ExecutionMode;
 import com.loyaltyos.onboarding.rules.enums.RuleStatus;
+import com.loyaltyos.onboarding.rules.enums.RuleType;
+import java.util.Set;
 import com.loyaltyos.onboarding.rules.evaluation.ConditionParseException;
 import com.loyaltyos.onboarding.rules.evaluation.ConditionTreeParser;
 import com.loyaltyos.onboarding.rules.evaluation.SpelEvaluationService;
@@ -126,7 +128,9 @@ public class RuleEvaluationService {
                 .orElseThrow(() -> new IllegalArgumentException("Rule not found: " + ruleUid));
             CachedRuleSnapshot snapshot = RuleCacheService.snapshotsFromEntities(List.of(ruleEntity)).getFirst();
 
-            boolean conditionOk = evaluateCondition(snapshot, eventMap, customerMap, tenantMap, now, progCtx);
+            boolean conditionOk = evaluateCondition(
+                tenantId, programmeUid, snapshot, eventMap, customerMap, tenantMap, now, progCtx
+            );
             if (!conditionOk) {
                 trace.put("matched", false);
                 return rb
@@ -212,7 +216,9 @@ public class RuleEvaluationService {
 
             List<MatchOutcome> outcomes = new ArrayList<>();
             for (CachedRuleSnapshot rule : snapshots) {
-                boolean conditionOk = evaluateCondition(rule, eventMap, customerMap, tenantMap, now, progCtx);
+                boolean conditionOk = evaluateCondition(
+                    tenantId, programmeUid, rule, eventMap, customerMap, tenantMap, now, progCtx
+                );
                 if (!conditionOk) {
                     continue;
                 }
@@ -436,21 +442,53 @@ public class RuleEvaluationService {
         return RuleCacheService.snapshotsFromEntities(rules);
     }
 
-    private boolean evaluateCondition(CachedRuleSnapshot rule, Map<String, Object> eventMap,
-                                      Map<String, Object> customerMap, Map<String, Object> tenantMap, Instant now,
-                                      ProgrammeEvaluationContext progCtx) {
+    private boolean evaluateCondition(
+        String tenantId,
+        String programmeUid,
+        CachedRuleSnapshot rule,
+        Map<String, Object> eventMap,
+        Map<String, Object> customerMap,
+        Map<String, Object> tenantMap,
+        Instant now,
+        ProgrammeEvaluationContext progCtx
+    ) {
         try {
             String frag;
             if (rule.getConditionTree() == null || rule.getConditionTree().isNull() || rule.getConditionTree().isMissingNode()) {
                 frag = "true";
             } else {
-                frag = conditionTreeParser.parseConditionTree(rule.getConditionTree(), progCtx.getAllowedEventPropertyNames());
+                Set<String> allowlist = resolveAllowlistForRule(tenantId, programmeUid, rule, progCtx);
+                frag = conditionTreeParser.parseConditionTree(rule.getConditionTree(), allowlist);
             }
             return spelEvaluationService.evaluateCondition(frag, eventMap, customerMap, tenantMap, now);
         } catch (ConditionParseException e) {
             log.warn("Condition parse failed ruleUid={}: {}", rule.getRuleUid(), e.getMessage());
             return false;
         }
+    }
+
+    private Set<String> resolveAllowlistForRule(
+        String tenantId,
+        String programmeUid,
+        CachedRuleSnapshot rule,
+        ProgrammeEvaluationContext progCtx
+    ) {
+        RuleType type;
+        try {
+            type = rule.getRuleType() != null ? RuleType.valueOf(rule.getRuleType()) : RuleType.PROGRAMME;
+        } catch (Exception e) {
+            type = RuleType.PROGRAMME;
+        }
+        if (type == RuleType.CAMPAIGN) {
+            return programmeRuleContextLoader.resolveAllowedEventPropertyNames(
+                tenantId,
+                type,
+                rule.getCampaignUid(),
+                programmeUid,
+                rule.getTriggerEventType()
+            );
+        }
+        return progCtx.getAllowedEventPropertyNames();
     }
 
     private BigDecimal sumAwardPointsBase(CachedRuleSnapshot rule, Map<String, Object> eventMap, Map<String, Object> customerMap,

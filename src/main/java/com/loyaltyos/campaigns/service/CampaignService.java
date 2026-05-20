@@ -3,6 +3,9 @@ package com.loyaltyos.campaigns.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.loyaltyos.campaigns.dto.CampaignEventSchemaUpsertRequest;
+import com.loyaltyos.onboarding.service.EventSchemaJsonSupport;
 import com.loyaltyos.campaigns.config.CampaignProperties;
 import com.loyaltyos.campaigns.dto.CampaignResponse;
 import com.loyaltyos.campaigns.dto.CampaignStatsResponse;
@@ -174,6 +177,40 @@ public class CampaignService {
         return analyticsService.getCampaignStats(tenantId, campaignUid);
     }
 
+    @Transactional(readOnly = true)
+    public JsonNode getEventSchema(String tenantId, String campaignUid) {
+        Campaign c = loadCampaign(tenantId, campaignUid);
+        return c.getEventSchema() != null ? c.getEventSchema() : objectMapper.createObjectNode();
+    }
+
+    @Transactional
+    public CampaignResponse upsertEventSchema(String tenantId, String campaignUid, CampaignEventSchemaUpsertRequest req) {
+        assertCampaignsEnabled();
+        Campaign c = loadCampaign(tenantId, campaignUid);
+        if (isTerminalStatus(c.getStatus())) {
+            throw new CampaignConflictException("Cannot update event schema for campaign in status " + c.getStatus());
+        }
+        JsonNode schema = req.getEventSchema();
+        if (schema == null || schema.isNull()) {
+            throw new CampaignBadRequestException("eventSchema is required");
+        }
+        String validationError = EventSchemaJsonSupport.validateEventSchemaDocument(schema);
+        if (validationError != null) {
+            throw new CampaignBadRequestException(validationError);
+        }
+        ObjectNode stored = schema.deepCopy();
+        EventSchemaJsonSupport.ensureStandardFieldsUnion(stored);
+        c.setEventSchema(stored);
+        String triggerTypes = EventSchemaJsonSupport.triggerTypesFromEventSchema(stored);
+        if (triggerTypes.isBlank()) {
+            throw new CampaignBadRequestException("At least one event type is required in eventSchema");
+        }
+        c.setTriggerEventType(triggerTypes);
+        programmeValidator.validateTriggerEventType(tenantId, c.getProgrammeUid(), triggerTypes);
+        Campaign saved = campaignRepository.save(c);
+        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
+    }
+
     private Campaign loadCampaign(String tenantId, String campaignUid) {
         return campaignRepository.findByTenantIdAndCampaignUid(tenantId, campaignUid)
             .orElseThrow(() -> new CampaignNotFoundException("Campaign not found: " + campaignUid));
@@ -183,7 +220,7 @@ public class CampaignService {
         if (req.getValidUntil() != null && req.getValidFrom() != null && !req.getValidUntil().isAfter(req.getValidFrom())) {
             throw new CampaignBadRequestException("validUntil must be after validFrom");
         }
-        programmeValidator.validateTriggerEventType(tenantId, programmeUid, req.getTriggerEventType());
+        programmeValidator.validateTriggerEventTypeIfPresent(tenantId, programmeUid, req.getTriggerEventType());
         programmeValidator.validateTierUids(tenantId, programmeUid, req.getTargetSegment());
         programmeValidator.validateOfferConfig(req.getOfferConfig());
         parseStackMode(req.getStackMode());
@@ -296,6 +333,7 @@ public class CampaignService {
         r.setTargetSegment(c.getTargetSegment());
         r.setEligibilityRules(c.getEligibilityRules());
         r.setTriggerEventType(c.getTriggerEventType());
+        r.setEventSchema(c.getEventSchema());
         r.setOfferConfig(c.getOfferConfig());
         r.setMutualExclGroup(c.getMutualExclGroup());
         r.setStackMode(c.getStackMode());

@@ -2,20 +2,24 @@ spring:
   application:
     name: tenant-onboarding-service
 
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+ 
   # Always import local-only secrets if present.
   # This avoids requiring manual env var exports for SMTP/JWT in dev.
   # File is optional and should remain git-ignored.
   config:
     import: optional:file:./application-secrets.yml
-
+ 
   threads:
     virtual:
       enabled: true
-
-  # JPA — do NOT auto-create schema, Flyway manages this
+ 
+  # JPA schema: no Flyway. Hibernate syncs entity changes on startup (dev default: update).
+  # For production-like DBs, set JPA_DDL_AUTO=validate and apply SQL under backend/scripts/sql/ manually.
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: ${JPA_DDL_AUTO:update}
     show-sql: false
     open-in-view: false
     properties:
@@ -23,13 +27,6 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
         jdbc:
           time_zone: UTC
-
-  # Flyway — migrations in db/migration
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: false
-
   # Datasource — values come from environment variables
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
@@ -44,13 +41,13 @@ spring:
       max-lifetime: 1800000
       leak-detection-threshold: 60000
       pool-name: onboarding-pool
-
+ 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-
+ 
   # --- Kafka (commented out until we scale / need downstream consumers) ---
   # kafka:
   #   bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
@@ -62,13 +59,13 @@ spring:
   #     properties:
   #       enable.idempotence: "true"
   #       max.in.flight.requests.per.connection: "5"
-
+ 
   # Security — disable default user for now, we configure this properly later
   security:
     user:
       name: disable
       password: disable
-
+ 
   # Mail (host/port defaults; username/password can come from application-secrets.yml)
   mail:
     host: ${SPRING_MAIL_HOST:smtp.gmail.com}
@@ -85,10 +82,10 @@ spring:
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
-
+ 
 server:
   port: 8081
-
+ 
 loyalty:
   rules:
     cache-enabled: ${LOYALTY_RULES_CACHE_ENABLED:true}
@@ -96,8 +93,27 @@ loyalty:
     max-condition-depth: ${LOYALTY_RULES_MAX_CONDITION_DEPTH:32}
     evaluation-timeout-ms: ${LOYALTY_RULES_EVAL_TIMEOUT_MS:5000}
     caps-redis-enabled: ${LOYALTY_RULES_CAPS_REDIS_ENABLED:false}
-
-# App-level policies
+  rewards:
+    issuance-audit-enabled: ${LOYALTY_REWARDS_ISSUANCE_AUDIT_ENABLED:true}
+    issuance-audit-strict: ${LOYALTY_REWARDS_ISSUANCE_AUDIT_STRICT:false}
+    failure-audit-enabled: ${LOYALTY_REWARDS_FAILURE_AUDIT_ENABLED:true}
+    expiry-job-enabled: ${LOYALTY_REWARDS_EXPIRY_JOB_ENABLED:false}
+    expiry-batch-limit: ${LOYALTY_REWARDS_EXPIRY_BATCH_LIMIT:500}
+    expiry-fixed-delay-ms: ${LOYALTY_REWARDS_EXPIRY_FIXED_DELAY_MS:3600000}
+    reconciliation-job-enabled: ${LOYALTY_REWARDS_RECONCILIATION_JOB_ENABLED:false}
+    reconciliation-auto-fix-enabled: ${LOYALTY_REWARDS_RECONCILIATION_AUTO_FIX_ENABLED:false}
+    reconciliation-customer-batch-limit: ${LOYALTY_REWARDS_RECONCILIATION_CUSTOMER_BATCH_LIMIT:200}
+    reconciliation-fixed-delay-ms: ${LOYALTY_REWARDS_RECONCILIATION_FIXED_DELAY_MS:3600000}
+    default-credit-expiry-months: ${LOYALTY_REWARDS_DEFAULT_CREDIT_EXPIRY_MONTHS:24}
+  campaigns:
+    enabled: ${LOYALTY_CAMPAIGNS_ENABLED:true}
+    approval-budget-threshold: ${LOYALTY_CAMPAIGNS_APPROVAL_BUDGET_THRESHOLD:100000}
+    default-alert-threshold-pct: ${LOYALTY_CAMPAIGNS_DEFAULT_ALERT_THRESHOLD_PCT:80}
+    resolution-log-enabled: ${LOYALTY_CAMPAIGNS_RESOLUTION_LOG_ENABLED:true}
+    budget-alert-webhook-enabled: ${LOYALTY_CAMPAIGNS_BUDGET_ALERT_WEBHOOK_ENABLED:true}
+    budget-alert-kafka-topic: ${LOYALTY_CAMPAIGNS_BUDGET_ALERT_KAFKA_TOPIC:platform.campaign.alerts}
+    exhausted-job-enabled: ${LOYALTY_CAMPAIGNS_EXHAUSTED_JOB_ENABLED:true}
+    exhausted-fixed-delay-ms: ${LOYALTY_CAMPAIGNS_EXHAUSTED_FIXED_DELAY_MS:300000}
 app:
   onboarding:
     # Unverified registrations expire after this many hours.
@@ -105,7 +121,7 @@ app:
     pending-expiry-hours: ${APP_ONBOARDING_PENDING_EXPIRY_HOURS:24}
     cleanup:
       fixed-delay-ms: ${APP_ONBOARDING_CLEANUP_FIXED_DELAY_MS:3600000}
-
+ 
 # Actuator endpoints
 management:
   endpoints:
@@ -115,11 +131,10 @@ management:
   endpoint:
     health:
       show-details: when-authorized
-
+ 
 # SpringDoc OpenAPI
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
-

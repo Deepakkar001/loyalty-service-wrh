@@ -40,6 +40,14 @@ class TriggerEventTypesTest {
     }
 
     @Test
+    void resolveSingleForCampaignRule_acceptsTypeWhenCampaignHasNoneYet() {
+        assertThat(TriggerEventTypes.resolveSingleForCampaignRule("", "PURCHASE"))
+            .isEqualTo("PURCHASE");
+        assertThat(TriggerEventTypes.resolveSingleForCampaignRule(null, "login"))
+            .isEqualTo("LOGIN");
+    }
+
+    @Test
     void validateSerialized_requiresAtLeastOneType() {
         assertThatThrownBy(() -> TriggerEventTypes.validateSerialized("  "))
             .hasMessageContaining("required");

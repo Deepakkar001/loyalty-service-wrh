@@ -9,6 +9,7 @@ import com.loyaltyos.onboarding.rules.entity.EarnRule;
 import com.loyaltyos.onboarding.rules.entity.RuleAction;
 import com.loyaltyos.onboarding.rules.entity.RuleCondition;
 import com.loyaltyos.onboarding.rules.enums.ExecutionMode;
+import com.loyaltyos.onboarding.rules.enums.RuleType;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,6 +117,9 @@ public class RuleCacheService {
             .priority(r.getPriority() != null ? r.getPriority() : 0)
             .executionMode(
                 r.getExecutionMode() != null ? r.getExecutionMode().name() : ExecutionMode.ALL_MATCHING.name())
+            .ruleType(r.getRuleType() != null ? r.getRuleType().name() : RuleType.PROGRAMME.name())
+            .campaignUid(r.getCampaignUid())
+            .triggerEventType(r.getTriggerEventType())
             .conditionTree(c != null ? c.getConditionTree() : null)
             .actions(acts)
             .build();
