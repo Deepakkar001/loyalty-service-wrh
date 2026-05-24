@@ -1,7 +1,9 @@
 package com.loyaltyos.onboarding.config;
 
+import com.loyaltyos.onboarding.security.ApiKeyAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -15,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -26,7 +29,31 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
+
+    public SecurityConfig(ApiKeyAuthenticationFilter apiKeyAuthenticationFilter) {
+        this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
+    }
+
     @Bean
+    @Order(1)
+    public SecurityFilterChain integrationFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/api/v1/integration/**")
+            .csrf(AbstractHttpConfigurer::disable)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
@@ -80,7 +107,11 @@ public class SecurityConfig {
             HttpMethod.OPTIONS.name()
         ));
         config.setAllowedHeaders(List.of("*"));
-        config.setExposedHeaders(List.of("Location", "Content-Disposition"));
+        config.setExposedHeaders(List.of(
+            "Location", "Content-Disposition", "X-Request-ID", "X-Processing-Time",
+            "X-Rate-Limit-Limit", "X-Rate-Limit-Remaining", "X-Rate-Limit-Reset",
+            "Retry-After", "X-Error-ID"
+        ));
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

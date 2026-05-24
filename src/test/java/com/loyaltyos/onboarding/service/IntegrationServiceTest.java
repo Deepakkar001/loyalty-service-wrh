@@ -16,6 +16,7 @@ import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.rules.service.RuleEvaluationService;
+import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -57,7 +58,8 @@ class IntegrationServiceTest {
         IntegrationService svc = new IntegrationService(
             tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
             new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
-            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class)
+            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
+            mock(IntegrationCredentialCryptoService.class)
         );
 
         assertThrows(InvalidStateException.class, () -> svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX));
@@ -94,11 +96,14 @@ class IntegrationServiceTest {
             if (k.getKeyUid() == null) throw new AssertionError("keyUid must be set");
             return k;
         });
+        var crypto = mock(IntegrationCredentialCryptoService.class);
+        when(crypto.encrypt(any())).thenReturn("enc-test");
 
         IntegrationService svc = new IntegrationService(
             tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
             new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
-            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class)
+            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
+            crypto
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX);
@@ -109,6 +114,48 @@ class IntegrationServiceTest {
 
         verify(keyRepo).save(any());
         verify(stateMachine).transition(eq(tenant), eq(OnboardingStatus.SANDBOX_TESTING), eq("t1"), eq("TENANT"));
+    }
+
+    @Test
+    void generateKeys_activeTenant_generatesWithoutStatusTransition() {
+        var tenantRepo = mock(TenantOnboardingRepository.class);
+        var keyRepo = mock(TenantApiKeyRepository.class);
+        var cfgRepo = mock(TenantConfigRepository.class);
+        var webhookRepo = mock(WebhookSubscriptionRepository.class);
+        var auditRepo = mock(OnboardingAuditLogRepository.class);
+        var stateMachine = mock(OnboardingStateMachine.class);
+
+        TenantOnboarding tenant = TenantOnboarding.builder()
+            .tenantId("t1")
+            .companyName("Acme")
+            .slug("acme")
+            .email("x@x.com")
+            .passwordHash("hash")
+            .businessCategory("RETAIL")
+            .onboardingStatus(OnboardingStatus.ACTIVE)
+            .identityMode(IdentityMode.BOTH)
+            .subscriptionTier(SubscriptionTier.STANDARD)
+            .dataResidencyRegion(DataResidencyRegion.IN)
+            .countryCode("IN")
+            .build();
+
+        when(tenantRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
+        when(keyRepo.findByTenantIdAndEnvironmentAndStatus(any(), any(), any())).thenReturn(List.of());
+        when(keyRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        var crypto = mock(IntegrationCredentialCryptoService.class);
+        when(crypto.encrypt(any())).thenReturn("enc-test");
+
+        IntegrationService svc = new IntegrationService(
+            tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
+            new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
+            mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
+            crypto
+        );
+
+        var res = svc.generateKeys("t1", ApiKeyEnvironment.PRODUCTION);
+        assertNotNull(res.getApiKey());
+        assertTrue(res.getApiKey().startsWith("los_live_"));
+        verify(stateMachine, never()).transition(any(), any(), any(), any());
     }
 }
 

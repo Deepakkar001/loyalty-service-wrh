@@ -14,5 +14,9 @@ public interface TenantApiKeyRepository extends JpaRepository<TenantApiKey, Long
     Optional<TenantApiKey> findByKeyHash(String keyHash);
     List<TenantApiKey> findByTenantIdAndEnvironmentAndStatus(
         String tenantId, ApiKeyEnvironment environment, ApiKeyStatus status);
+
+    List<TenantApiKey> findByTenantIdOrderByCreatedAtDesc(String tenantId);
+
+    Optional<TenantApiKey> findByKeyUidAndTenantId(String keyUid, String tenantId);
 }
 

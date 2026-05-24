@@ -6,17 +6,29 @@ Part of the LoyaltyOS platform. Handles the 5-stage tenant onboarding workflow.
 
 ### Prerequisites
 - Java 21
-- Docker Desktop
+- **MySQL 8** on `localhost:3306`
+- **Redis** on `localhost:6379` (local install — not Docker)
 
-### Start infrastructure
-```bash
-docker-compose up -d
-```
+### Start Redis (required for register, login, refresh tokens)
 
-Wait ~30 seconds for all services to be healthy, then:
+The app always connects to **local Redis** at `localhost:6379` (see `spring.data.redis` in `application.yml`).
 
-Note: this `docker-compose` is for Kafka/Redis. This service is designed to use **your locally installed MySQL 8**
-on `localhost:3306`. Configure DB settings via environment variables (recommended):
+Start your local Redis server before running the app, for example:
+
+- **Windows (WSL):** `sudo service redis-server start`
+- **Windows (Memurai / Redis MSI):** start the Redis service from Services or your installer's CLI
+- **macOS:** `brew services start redis`
+- **Linux:** `sudo systemctl start redis`
+
+Verify: `redis-cli ping` → `PONG`
+
+Optional overrides: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+
+`docker-compose.yml` is reserved for **Kafka only** (commented out). Do not use Docker for Redis in this project.
+
+### Database
+
+This service uses **your locally installed MySQL 8** on `localhost:3306`. Configure via environment variables (recommended):
 
 - `DB_URL` (example: `jdbc:mysql://localhost:3306/loyaltyos_onboarding?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC`)
 - `DB_USERNAME`
@@ -81,5 +93,5 @@ curl "http://localhost:8080/api/v1/onboarding/{tenantId}/status"
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | Kafka UI   | http://localhost:8090        |
 | MySQL      | localhost:3306               |
-| Redis      | localhost:6379               |
+| Redis      | localhost:6379 (local install, not Docker) |
 

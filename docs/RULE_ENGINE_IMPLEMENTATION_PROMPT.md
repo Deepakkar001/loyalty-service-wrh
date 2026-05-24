@@ -13,7 +13,7 @@
 ### Existing infrastructure (validate before coding)
 
 - [ ] **MySQL 8** running (local or Docker) — **not** PostgreSQL; this project uses `spring.jpa` + MySQL dialect.
-- [ ] **Redis 7.x** from `docker-compose` (`backend/docker-compose.yml`) — used for rule list cache + optional frequency/cap counters.
+- [ ] **Redis 7.x** on `localhost:6379` (local install) — used for rule list cache + optional frequency/cap counters.
 - [ ] **Kafka:** intentionally **disabled** in this repo (see `KafkaConfig.java`, `build.gradle`). **Do not** add Kafka consumers/producers for rule-engine v1. Use **in-process** calls + optional `@Async` later.
 - [ ] **Spring Boot 3.3 + Java 21** — already set in `build.gradle`.
 - [ ] **Flyway:** migrations **V1–V22** applied (`programmes`, `programme_config`, `tier_definitions` scoped by `programme_uid`, `tenant_config`, webhooks, API keys, etc.).

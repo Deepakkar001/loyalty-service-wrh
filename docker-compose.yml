@@ -1,18 +1,10 @@
-services:
+# LoyaltyOS optional infrastructure (Kafka only — when enabled below).
+#
+# Redis is NOT run via Docker for this project. Use a local Redis instance on
+# localhost:6379 (see backend/README.md). Spring connects via spring.data.redis
+# in application.yml (defaults: REDIS_HOST=localhost, REDIS_PORT=6379).
 
-  redis:
-    image: redis:7.2-alpine
-    container_name: loyaltyos-redis
-    ports:
-      - "6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
+services:
 
   # --- Kafka stack (commented out until we need it; app runs without a broker) ---
   # kafka:
@@ -51,6 +43,3 @@ services:
   #   depends_on:
   #     kafka:
   #       condition: service_healthy
-
-volumes:
-  redis_data:

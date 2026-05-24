@@ -2,6 +2,8 @@ package com.loyaltyos.rewards.repository;
 
 import com.loyaltyos.rules.entity.PointsLedger;
 import com.loyaltyos.rules.enums.LedgerEntryType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -31,6 +33,33 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedger, Long
         String tenantId,
         String customerId,
         String idempotencyKey
+    );
+
+    Page<PointsLedger> findByTenantIdAndProgrammeUidAndCustomerIdOrderByCreatedAtDesc(
+        String tenantId,
+        String programmeUid,
+        String customerId,
+        Pageable pageable
+    );
+
+    @Query("""
+        SELECT pl FROM PointsLedger pl
+        WHERE pl.tenantId = :tenantId
+          AND pl.programmeUid = :programmeUid
+          AND pl.customerId = :customerId
+          AND (:entryType IS NULL OR pl.entryType = :entryType)
+          AND (:from IS NULL OR pl.createdAt >= :from)
+          AND (:to IS NULL OR pl.createdAt <= :to)
+        ORDER BY pl.createdAt DESC
+        """)
+    Page<PointsLedger> findCustomerLedger(
+        @Param("tenantId") String tenantId,
+        @Param("programmeUid") String programmeUid,
+        @Param("customerId") String customerId,
+        @Param("entryType") LedgerEntryType entryType,
+        @Param("from") Instant from,
+        @Param("to") Instant to,
+        Pageable pageable
     );
 
     boolean existsByTenantIdAndCustomerIdAndEntryTypeAndReversalOfLedgerId(

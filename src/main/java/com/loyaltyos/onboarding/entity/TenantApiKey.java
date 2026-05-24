@@ -51,6 +51,27 @@ public class TenantApiKey {
     @Column(name = "last_used_at")
     private Instant lastUsedAt;
 
+    @Column(name = "signing_secret_encrypted", columnDefinition = "TEXT")
+    private String signingSecretEncrypted;
+
+    @Column(name = "rate_limit_requests")
+    private Integer rateLimitRequests = 1000;
+
+    @Column(name = "rate_limit_window_minutes")
+    private Integer rateLimitWindowMinutes = 60;
+
+    @Column(name = "ip_whitelist", columnDefinition = "JSON")
+    private String ipWhitelist;
+
+    @Column(name = "name", length = 255)
+    private String name;
+
+    @Column(name = "description", length = 500)
+    private String description;
+
+    @Column(name = "last_secret_revealed_at")
+    private Instant lastSecretRevealedAt;
+
     /** JPA requires a no-arg constructor. */
     public TenantApiKey() {}
 
@@ -114,9 +135,36 @@ public class TenantApiKey {
         public Builder expiresAt(Instant expiresAt) { this.expiresAt = expiresAt; return this; }
         public Builder revokedAt(Instant revokedAt) { this.revokedAt = revokedAt; return this; }
         public Builder lastUsedAt(Instant lastUsedAt) { this.lastUsedAt = lastUsedAt; return this; }
+        private String signingSecretEncrypted;
+        private Integer rateLimitRequests = 1000;
+        private Integer rateLimitWindowMinutes = 60;
+        private String ipWhitelist;
+        private String name;
+        private String description;
+        private Instant lastSecretRevealedAt;
+
+        public Builder signingSecretEncrypted(String signingSecretEncrypted) {
+            this.signingSecretEncrypted = signingSecretEncrypted;
+            return this;
+        }
+        public Builder rateLimitRequests(Integer rateLimitRequests) {
+            this.rateLimitRequests = rateLimitRequests;
+            return this;
+        }
+        public Builder rateLimitWindowMinutes(Integer rateLimitWindowMinutes) {
+            this.rateLimitWindowMinutes = rateLimitWindowMinutes;
+            return this;
+        }
+        public Builder ipWhitelist(String ipWhitelist) { this.ipWhitelist = ipWhitelist; return this; }
+        public Builder name(String name) { this.name = name; return this; }
+        public Builder description(String description) { this.description = description; return this; }
+        public Builder lastSecretRevealedAt(Instant lastSecretRevealedAt) {
+            this.lastSecretRevealedAt = lastSecretRevealedAt;
+            return this;
+        }
 
         public TenantApiKey build() {
-            return new TenantApiKey(
+            TenantApiKey key = new TenantApiKey(
                 id,
                 tenantId,
                 keyUid,
@@ -130,6 +178,14 @@ public class TenantApiKey {
                 revokedAt,
                 lastUsedAt
             );
+            key.signingSecretEncrypted = signingSecretEncrypted;
+            key.rateLimitRequests = rateLimitRequests;
+            key.rateLimitWindowMinutes = rateLimitWindowMinutes;
+            key.ipWhitelist = ipWhitelist;
+            key.name = name;
+            key.description = description;
+            key.lastSecretRevealedAt = lastSecretRevealedAt;
+            return key;
         }
     }
 
@@ -157,5 +213,33 @@ public class TenantApiKey {
     public void setRevokedAt(Instant revokedAt) { this.revokedAt = revokedAt; }
     public Instant getLastUsedAt() { return lastUsedAt; }
     public void setLastUsedAt(Instant lastUsedAt) { this.lastUsedAt = lastUsedAt; }
+    public String getSigningSecretEncrypted() { return signingSecretEncrypted; }
+    public void setSigningSecretEncrypted(String signingSecretEncrypted) {
+        this.signingSecretEncrypted = signingSecretEncrypted;
+    }
+    public Integer getRateLimitRequests() {
+        return rateLimitRequests != null ? rateLimitRequests : 1000;
+    }
+    public void setRateLimitRequests(Integer rateLimitRequests) { this.rateLimitRequests = rateLimitRequests; }
+    public Integer getRateLimitWindowMinutes() {
+        return rateLimitWindowMinutes != null ? rateLimitWindowMinutes : 60;
+    }
+    public void setRateLimitWindowMinutes(Integer rateLimitWindowMinutes) {
+        this.rateLimitWindowMinutes = rateLimitWindowMinutes;
+    }
+    public String getIpWhitelist() { return ipWhitelist; }
+    public void setIpWhitelist(String ipWhitelist) { this.ipWhitelist = ipWhitelist; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+    public Instant getLastSecretRevealedAt() { return lastSecretRevealedAt; }
+    public void setLastSecretRevealedAt(Instant lastSecretRevealedAt) {
+        this.lastSecretRevealedAt = lastSecretRevealedAt;
+    }
+
+    public boolean hasRetrievableSecret() {
+        return signingSecretEncrypted != null && !signingSecretEncrypted.isBlank();
+    }
 }
 

@@ -28,6 +28,7 @@ import com.loyaltyos.onboarding.repository.TenantApiKeyRepository;
 import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
+import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import com.loyaltyos.onboarding.logging.HttpOutRestTemplateInterceptor;
 import java.util.Objects;
@@ -56,6 +57,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -63,6 +65,13 @@ import java.util.UUID;
 public class IntegrationService {
 
     private static final Logger log = LoggerFactory.getLogger(IntegrationService.class);
+
+    /** Statuses allowed to create or rotate integration API keys (dashboard + onboarding). */
+    private static final Set<OnboardingStatus> KEY_GENERATION_ALLOWED = Set.of(
+        OnboardingStatus.RULES_CONFIGURED,
+        OnboardingStatus.SANDBOX_TESTING,
+        OnboardingStatus.ACTIVE
+    );
 
     private final TenantOnboardingRepository tenantOnboardingRepository;
     private final TenantApiKeyRepository tenantApiKeyRepository;
@@ -75,6 +84,7 @@ public class IntegrationService {
     private final RuleEvaluationService ruleEvaluationService;
     private final SandboxTestEventRepository sandboxTestEventRepository;
     private final ProgrammeService programmeService;
+    private final IntegrationCredentialCryptoService credentialCryptoService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -89,7 +99,8 @@ public class IntegrationService {
         RestTemplateBuilder restTemplateBuilder,
         RuleEvaluationService ruleEvaluationService,
         SandboxTestEventRepository sandboxTestEventRepository,
-        ProgrammeService programmeService
+        ProgrammeService programmeService,
+        IntegrationCredentialCryptoService credentialCryptoService
     ) {
         this.tenantOnboardingRepository = Objects.requireNonNull(tenantOnboardingRepository, "tenantOnboardingRepository");
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
@@ -102,6 +113,7 @@ public class IntegrationService {
         this.ruleEvaluationService = Objects.requireNonNull(ruleEvaluationService, "ruleEvaluationService");
         this.sandboxTestEventRepository = Objects.requireNonNull(sandboxTestEventRepository, "sandboxTestEventRepository");
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
+        this.credentialCryptoService = Objects.requireNonNull(credentialCryptoService, "credentialCryptoService");
     }
 
     public ApiKeyGeneratedResponse generateSandboxKeysLegacy(String tenantId) {
@@ -114,11 +126,9 @@ public class IntegrationService {
         TenantOnboarding tenant = tenantOnboardingRepository.findByTenantId(tenantId)
             .orElseThrow(() -> new TenantNotFoundException(tenantId));
 
-        // Precondition: must be RULES_CONFIGURED (or already in SANDBOX_TESTING).
-        if (tenant.getOnboardingStatus() != OnboardingStatus.RULES_CONFIGURED
-            && tenant.getOnboardingStatus() != OnboardingStatus.SANDBOX_TESTING) {
+        if (!KEY_GENERATION_ALLOWED.contains(tenant.getOnboardingStatus())) {
             throw new com.loyaltyos.onboarding.exception.InvalidStateException(
-                "Tenant must complete rules setup before generating API keys",
+                "Complete rules setup (or activate your programme) before generating API keys",
                 tenant.getOnboardingStatus().name(),
                 OnboardingStatus.RULES_CONFIGURED.name()
             );
@@ -148,6 +158,7 @@ public class IntegrationService {
             .keyPrefix(prefix)
             .keyHash(keyHash)
             .signingSecretHash(secretHash)
+            .signingSecretEncrypted(credentialCryptoService.encrypt(rawSecret))
             .environment(env)
             .status(ApiKeyStatus.ACTIVE)
             .build());
@@ -280,7 +291,7 @@ public class IntegrationService {
             .build();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException.class)
     public Map<String, Object> validateSandboxEvent(String tenantId, SandboxValidateEventRequest request) {
         tenantConfigRepository.findByTenantId(tenantId)
             .orElseThrow(() -> new TenantNotFoundException(tenantId));
