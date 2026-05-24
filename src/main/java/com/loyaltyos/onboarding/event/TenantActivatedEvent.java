@@ -1,8 +1,8 @@
 package com.loyaltyos.onboarding.event;
 
-import com.loyaltyos.onboarding.domain.enums.DataResidencyRegion;
-import com.loyaltyos.onboarding.domain.enums.IdentityMode;
-import com.loyaltyos.onboarding.domain.enums.SubscriptionTier;
+import com.loyaltyos.onboarding.enums.DataResidencyRegion;
+import com.loyaltyos.onboarding.enums.IdentityMode;
+import com.loyaltyos.onboarding.enums.SubscriptionTier;
 
 import java.time.Instant;
 import java.util.List;

@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.AdminLoginRequest;
-import com.loyaltyos.onboarding.dto.response.AdminLoginResponse;
+import com.loyaltyos.onboarding.dto.AdminLoginRequest;
+import com.loyaltyos.onboarding.dto.AdminLoginResponse;
 import com.loyaltyos.onboarding.service.AdminAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

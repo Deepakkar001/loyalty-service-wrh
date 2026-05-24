@@ -1,13 +1,13 @@
 package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loyaltyos.onboarding.domain.entity.Programme;
-import com.loyaltyos.onboarding.domain.entity.ProgrammeConfig;
+import com.loyaltyos.onboarding.entity.Programme;
+import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeConfigRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import com.loyaltyos.onboarding.rules.service.RuleCacheService;
+import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import org.junit.jupiter.api.Test;
 

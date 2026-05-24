@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.config;
 
-import com.loyaltyos.onboarding.domain.entity.AdminUser;
-import com.loyaltyos.onboarding.domain.enums.AdminRole;
+import com.loyaltyos.onboarding.entity.AdminUser;
+import com.loyaltyos.onboarding.enums.AdminRole;
 import com.loyaltyos.onboarding.repository.AdminUserRepository;
 import java.util.Objects;
 import org.springframework.boot.CommandLineRunner;

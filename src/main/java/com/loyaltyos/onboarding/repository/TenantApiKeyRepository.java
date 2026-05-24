@@ -1,8 +1,8 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.TenantApiKey;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyEnvironment;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyStatus;
+import com.loyaltyos.onboarding.entity.TenantApiKey;
+import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
+import com.loyaltyos.onboarding.enums.ApiKeyStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

@@ -1,8 +1,8 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.AdminUser;
-import com.loyaltyos.onboarding.dto.request.AdminLoginRequest;
-import com.loyaltyos.onboarding.dto.response.AdminLoginResponse;
+import com.loyaltyos.onboarding.entity.AdminUser;
+import com.loyaltyos.onboarding.dto.AdminLoginRequest;
+import com.loyaltyos.onboarding.dto.AdminLoginResponse;
 import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
 import com.loyaltyos.onboarding.repository.AdminUserRepository;
 import com.loyaltyos.onboarding.security.JwtProperties;

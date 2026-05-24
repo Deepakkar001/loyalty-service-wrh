@@ -1,10 +1,10 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.domain.enums.ApiKeyEnvironment;
-import com.loyaltyos.onboarding.dto.request.SandboxValidateEventRequest;
-import com.loyaltyos.onboarding.dto.response.ApiKeyGeneratedResponse;
-import com.loyaltyos.onboarding.dto.response.ApiKeySummaryResponse;
-import com.loyaltyos.onboarding.dto.response.WebhookStatusResponse;
+import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
+import com.loyaltyos.onboarding.dto.SandboxValidateEventRequest;
+import com.loyaltyos.onboarding.dto.ApiKeyGeneratedResponse;
+import com.loyaltyos.onboarding.dto.ApiKeySummaryResponse;
+import com.loyaltyos.onboarding.dto.WebhookStatusResponse;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.IntegrationService;
 import io.swagger.v3.oas.annotations.Operation;

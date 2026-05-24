@@ -1,10 +1,10 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.RegisterTenantRequest;
-import com.loyaltyos.onboarding.dto.request.ResendVerificationRequest;
-import com.loyaltyos.onboarding.dto.request.VerifyEmailCodeRequest;
-import com.loyaltyos.onboarding.dto.response.TenantRegistrationResponse;
-import com.loyaltyos.onboarding.dto.response.TenantStatusResponse;
+import com.loyaltyos.onboarding.dto.RegisterTenantRequest;
+import com.loyaltyos.onboarding.dto.ResendVerificationRequest;
+import com.loyaltyos.onboarding.dto.VerifyEmailCodeRequest;
+import com.loyaltyos.onboarding.dto.TenantRegistrationResponse;
+import com.loyaltyos.onboarding.dto.TenantStatusResponse;
 import com.loyaltyos.onboarding.service.IdempotencyService;
 import com.loyaltyos.onboarding.service.TenantRegistrationService;
 import io.swagger.v3.oas.annotations.Operation;

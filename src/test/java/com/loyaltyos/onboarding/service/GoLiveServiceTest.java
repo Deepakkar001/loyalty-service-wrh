@@ -1,14 +1,14 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyEnvironment;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyStatus;
-import com.loyaltyos.onboarding.domain.enums.DataResidencyRegion;
-import com.loyaltyos.onboarding.domain.enums.IdentityMode;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.domain.enums.SubscriptionTier;
+import com.loyaltyos.onboarding.entity.TenantConfig;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.AgreementStatus;
+import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
+import com.loyaltyos.onboarding.enums.ApiKeyStatus;
+import com.loyaltyos.onboarding.enums.DataResidencyRegion;
+import com.loyaltyos.onboarding.enums.IdentityMode;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.SubscriptionTier;
 import com.loyaltyos.onboarding.exception.InvalidStateException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
@@ -56,13 +56,13 @@ class GoLiveServiceTest {
             .build();
 
         when(tenantRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
-        var agreement = new com.loyaltyos.onboarding.domain.entity.TenantAgreement();
+        var agreement = new com.loyaltyos.onboarding.entity.TenantAgreement();
         agreement.setStatus(AgreementStatus.APPROVED);
         when(agreementRepo.findTopByTenantIdOrderByCreatedAtDesc("t1")).thenReturn(Optional.of(agreement));
         when(cfgRepo.existsByTenantId("t1")).thenReturn(true);
         when(tierRepo.countByTenantId("t1")).thenReturn(1L);
         when(keyRepo.findByTenantIdAndEnvironmentAndStatus("t1", ApiKeyEnvironment.PRODUCTION, ApiKeyStatus.ACTIVE))
-            .thenReturn(List.of(new com.loyaltyos.onboarding.domain.entity.TenantApiKey()));
+            .thenReturn(List.of(new com.loyaltyos.onboarding.entity.TenantApiKey()));
         when(webhookRepo.countByTenantIdAndActiveTrue("t1")).thenReturn(0L);
 
         GoLiveService svc = new GoLiveService(
@@ -100,13 +100,13 @@ class GoLiveServiceTest {
             .build();
 
         when(tenantRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
-        var agreement = new com.loyaltyos.onboarding.domain.entity.TenantAgreement();
+        var agreement = new com.loyaltyos.onboarding.entity.TenantAgreement();
         agreement.setStatus(AgreementStatus.APPROVED);
         when(agreementRepo.findTopByTenantIdOrderByCreatedAtDesc("t1")).thenReturn(Optional.of(agreement));
         when(cfgRepo.existsByTenantId("t1")).thenReturn(true);
         when(tierRepo.countByTenantId("t1")).thenReturn(1L);
         when(keyRepo.findByTenantIdAndEnvironmentAndStatus("t1", ApiKeyEnvironment.PRODUCTION, ApiKeyStatus.ACTIVE))
-            .thenReturn(List.of(new com.loyaltyos.onboarding.domain.entity.TenantApiKey()));
+            .thenReturn(List.of(new com.loyaltyos.onboarding.entity.TenantApiKey()));
 
         when(cfgRepo.findByTenantId("t1")).thenReturn(Optional.of(TenantConfig.builder().tenantId("t1").displayName("Acme").build()));
 

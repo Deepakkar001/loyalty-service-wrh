@@ -1,14 +1,14 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyEnvironment;
-import com.loyaltyos.onboarding.domain.enums.ApiKeyStatus;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.dto.response.GoLiveActivateResponse;
-import com.loyaltyos.onboarding.dto.response.GoLiveChecklistResponse;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.TenantConfig;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.AgreementStatus;
+import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
+import com.loyaltyos.onboarding.enums.ApiKeyStatus;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.dto.GoLiveActivateResponse;
+import com.loyaltyos.onboarding.dto.GoLiveChecklistResponse;
 // import com.loyaltyos.onboarding.event.TenantActivatedEvent; // with Kafka publish
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
@@ -125,7 +125,7 @@ public class GoLiveService {
         stateMachine.transition(tenant, OnboardingStatus.ACTIVE, tenantId, "TENANT");
         tenantOnboardingRepository.save(tenant);
 
-        cfg.setStatus(com.loyaltyos.onboarding.domain.enums.TenantStatus.ACTIVE);
+        cfg.setStatus(com.loyaltyos.onboarding.enums.TenantStatus.ACTIVE);
         tenantConfigRepository.save(cfg);
 
         auditLogRepository.save(OnboardingAuditLog.builder()

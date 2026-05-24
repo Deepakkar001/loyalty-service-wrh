@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.RefBusinessCategory;
-import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
+import com.loyaltyos.onboarding.entity.RefBusinessCategory;
+import com.loyaltyos.onboarding.enums.BusinessCategoryStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

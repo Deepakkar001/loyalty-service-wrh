@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.dto.request.LoginRequest;
-import com.loyaltyos.onboarding.dto.response.LoginResponse;
+import com.loyaltyos.onboarding.dto.LoginRequest;
+import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.exception.EmailNotVerifiedException;
 import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
@@ -116,8 +116,8 @@ public class TenantAuthService {
         String tenantId,
         String email,
         String role,
-        com.loyaltyos.onboarding.domain.enums.OnboardingStatus status,
-        com.loyaltyos.onboarding.domain.enums.AgreementStatus latestAgreementStatus
+        com.loyaltyos.onboarding.enums.OnboardingStatus status,
+        com.loyaltyos.onboarding.enums.AgreementStatus latestAgreementStatus
     ) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(jwtProperties.getAccessTtlMinutes() * 60);

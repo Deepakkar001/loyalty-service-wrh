@@ -1,8 +1,8 @@
 package com.loyaltyos.onboarding.service.statemachine;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.exception.InvalidStatusTransitionException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import java.util.Objects;

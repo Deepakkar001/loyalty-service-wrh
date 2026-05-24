@@ -1,6 +1,6 @@
 package com.loyaltyos.campaigns.model;
 
-import com.loyaltyos.onboarding.rewards.dto.RewardIssueCommandDto;
+import com.loyaltyos.rewards.dto.RewardIssueCommandDto;
 import java.math.BigDecimal;
 import java.util.Objects;
 

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.loyaltyos.campaigns.model.CampaignTargetSegment;
-import com.loyaltyos.onboarding.domain.entity.TierDefinition;
+import com.loyaltyos.onboarding.entity.TierDefinition;
 import com.loyaltyos.onboarding.repository.ProgrammeRepository;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
 import com.loyaltyos.onboarding.service.ProgrammeService;

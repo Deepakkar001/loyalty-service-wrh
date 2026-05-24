@@ -1,21 +1,21 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.RefBusinessCategory;
-import com.loyaltyos.onboarding.domain.entity.TenantContact;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.AnnualRevenueRange;
-import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
-import com.loyaltyos.onboarding.domain.enums.BusinessModel;
-import com.loyaltyos.onboarding.domain.enums.ContactRole;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.domain.enums.SubscriptionTier;
-import com.loyaltyos.onboarding.dto.request.RegisterTenantRequest;
-import com.loyaltyos.onboarding.dto.request.ResendVerificationRequest;
-import com.loyaltyos.onboarding.dto.request.UpdateIdentityRequest;
-import com.loyaltyos.onboarding.dto.request.UpdateProfileRequest;
-import com.loyaltyos.onboarding.dto.response.TenantRegistrationResponse;
-import com.loyaltyos.onboarding.dto.response.TenantStatusResponse;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.RefBusinessCategory;
+import com.loyaltyos.onboarding.entity.TenantContact;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.AnnualRevenueRange;
+import com.loyaltyos.onboarding.enums.BusinessCategoryStatus;
+import com.loyaltyos.onboarding.enums.BusinessModel;
+import com.loyaltyos.onboarding.enums.ContactRole;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.SubscriptionTier;
+import com.loyaltyos.onboarding.dto.RegisterTenantRequest;
+import com.loyaltyos.onboarding.dto.ResendVerificationRequest;
+import com.loyaltyos.onboarding.dto.UpdateIdentityRequest;
+import com.loyaltyos.onboarding.dto.UpdateProfileRequest;
+import com.loyaltyos.onboarding.dto.TenantRegistrationResponse;
+import com.loyaltyos.onboarding.dto.TenantStatusResponse;
 import com.loyaltyos.onboarding.exception.DuplicateTenantException;
 import com.loyaltyos.onboarding.exception.InvalidVerificationCodeException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
@@ -447,7 +447,7 @@ public class TenantRegistrationService {
             .orElse(null);
 
         String approvalNotes = null;
-        if (latestAgreement != null && latestAgreement.getStatus() == com.loyaltyos.onboarding.domain.enums.AgreementStatus.APPROVED) {
+        if (latestAgreement != null && latestAgreement.getStatus() == com.loyaltyos.onboarding.enums.AgreementStatus.APPROVED) {
             approvalNotes = auditLogRepository
                 .findTopByTenantIdAndActionOrderByCreatedAtDesc(tenantId, "AGREEMENT_APPROVED")
                 .map(OnboardingAuditLog::getAfterState)

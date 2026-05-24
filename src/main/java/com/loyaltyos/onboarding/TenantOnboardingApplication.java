@@ -6,9 +6,18 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(scanBasePackages = {"com.loyaltyos.onboarding", "com.loyaltyos.campaigns"})
-@EntityScan(basePackages = {"com.loyaltyos.onboarding", "com.loyaltyos.campaigns"})
-@EnableJpaRepositories(basePackages = {"com.loyaltyos.onboarding", "com.loyaltyos.campaigns"})
+@SpringBootApplication(scanBasePackages = {
+    "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
+    "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics"
+})
+@EntityScan(basePackages = {
+    "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
+    "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics"
+})
+@EnableJpaRepositories(basePackages = {
+    "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
+    "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics"
+})
 @EnableScheduling
 public class TenantOnboardingApplication {
 

@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;

@@ -1,6 +1,6 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

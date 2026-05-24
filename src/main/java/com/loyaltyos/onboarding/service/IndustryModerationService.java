@@ -1,9 +1,9 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.RefBusinessCategory;
-import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
-import com.loyaltyos.onboarding.dto.response.AdminBusinessCategoryItem;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.RefBusinessCategory;
+import com.loyaltyos.onboarding.enums.BusinessCategoryStatus;
+import com.loyaltyos.onboarding.dto.AdminBusinessCategoryItem;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.RefBusinessCategoryRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;

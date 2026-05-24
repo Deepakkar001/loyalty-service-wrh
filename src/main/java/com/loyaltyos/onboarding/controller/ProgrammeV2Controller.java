@@ -2,10 +2,10 @@ package com.loyaltyos.onboarding.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loyaltyos.onboarding.dto.request.CreateProgrammeRequest;
-import com.loyaltyos.onboarding.dto.request.UpsertProgrammeConfigRequest;
-import com.loyaltyos.onboarding.dto.response.ProgrammeConfigBlobResponse;
-import com.loyaltyos.onboarding.dto.response.ProgrammeSummaryResponse;
+import com.loyaltyos.onboarding.dto.CreateProgrammeRequest;
+import com.loyaltyos.onboarding.dto.UpsertProgrammeConfigRequest;
+import com.loyaltyos.onboarding.dto.ProgrammeConfigBlobResponse;
+import com.loyaltyos.onboarding.dto.ProgrammeSummaryResponse;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.ProgrammeService;
 import io.swagger.v3.oas.annotations.Operation;

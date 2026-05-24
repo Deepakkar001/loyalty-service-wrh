@@ -1,13 +1,13 @@
 package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.DataResidencyRegion;
-import com.loyaltyos.onboarding.domain.enums.IdentityMode;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.domain.enums.SubscriptionTier;
-import com.loyaltyos.onboarding.dto.request.ProgrammeConfigRequest;
+import com.loyaltyos.onboarding.entity.TenantConfig;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.DataResidencyRegion;
+import com.loyaltyos.onboarding.enums.IdentityMode;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.SubscriptionTier;
+import com.loyaltyos.onboarding.dto.ProgrammeConfigRequest;
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeConfigRepository;
@@ -16,7 +16,7 @@ import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
 import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
-import com.loyaltyos.onboarding.rules.service.RuleCacheService;
+import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import org.junit.jupiter.api.Test;
 

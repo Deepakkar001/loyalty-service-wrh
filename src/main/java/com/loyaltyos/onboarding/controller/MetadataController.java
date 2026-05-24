@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
-import com.loyaltyos.onboarding.dto.response.OnboardingMetadataResponse;
+import com.loyaltyos.onboarding.enums.BusinessCategoryStatus;
+import com.loyaltyos.onboarding.dto.OnboardingMetadataResponse;
 import com.loyaltyos.onboarding.repository.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

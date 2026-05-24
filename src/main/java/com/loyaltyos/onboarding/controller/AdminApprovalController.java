@@ -1,8 +1,8 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.ApproveAgreementRequest;
-import com.loyaltyos.onboarding.dto.request.RejectAgreementRequest;
-import com.loyaltyos.onboarding.dto.response.PendingAgreementListItem;
+import com.loyaltyos.onboarding.dto.ApproveAgreementRequest;
+import com.loyaltyos.onboarding.dto.RejectAgreementRequest;
+import com.loyaltyos.onboarding.dto.PendingAgreementListItem;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.AgreementApprovalService;
 import io.swagger.v3.oas.annotations.Operation;

@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.TenantAgreement;
-import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
+import com.loyaltyos.onboarding.entity.TenantAgreement;
+import com.loyaltyos.onboarding.enums.AgreementStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

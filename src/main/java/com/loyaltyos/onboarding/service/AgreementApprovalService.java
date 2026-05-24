@@ -1,11 +1,11 @@
 package com.loyaltyos.onboarding.service;
 
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.TenantAgreement;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.enums.AgreementStatus;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.dto.response.PendingAgreementListItem;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.TenantAgreement;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.AgreementStatus;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.dto.PendingAgreementListItem;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;

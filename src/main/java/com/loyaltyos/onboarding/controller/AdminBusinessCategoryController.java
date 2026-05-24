@@ -1,10 +1,10 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.domain.enums.BusinessCategoryStatus;
-import com.loyaltyos.onboarding.dto.request.ApproveBusinessCategoryRequest;
-import com.loyaltyos.onboarding.dto.request.DeactivateBusinessCategoryRequest;
-import com.loyaltyos.onboarding.dto.request.RejectBusinessCategoryRequest;
-import com.loyaltyos.onboarding.dto.response.AdminBusinessCategoryItem;
+import com.loyaltyos.onboarding.enums.BusinessCategoryStatus;
+import com.loyaltyos.onboarding.dto.ApproveBusinessCategoryRequest;
+import com.loyaltyos.onboarding.dto.DeactivateBusinessCategoryRequest;
+import com.loyaltyos.onboarding.dto.RejectBusinessCategoryRequest;
+import com.loyaltyos.onboarding.dto.AdminBusinessCategoryItem;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.IndustryModerationService;
 import io.swagger.v3.oas.annotations.Operation;

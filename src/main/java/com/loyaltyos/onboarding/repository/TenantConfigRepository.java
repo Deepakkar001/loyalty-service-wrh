@@ -1,6 +1,6 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
+import com.loyaltyos.onboarding.entity.TenantConfig;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

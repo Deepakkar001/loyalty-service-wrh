@@ -1,6 +1,6 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.SubmitAgreementRequest;
+import com.loyaltyos.onboarding.dto.SubmitAgreementRequest;
 import com.loyaltyos.onboarding.service.TenantAgreementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

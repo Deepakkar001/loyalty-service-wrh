@@ -1,9 +1,9 @@
 package com.loyaltyos.onboarding.statemachine;
 
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
 import org.junit.jupiter.api.Test;
 
-import static com.loyaltyos.onboarding.domain.enums.OnboardingStatus.*;
+import static com.loyaltyos.onboarding.enums.OnboardingStatus.*;
 import static org.assertj.core.api.Assertions.*;
 
 class OnboardingStateMachineTest {

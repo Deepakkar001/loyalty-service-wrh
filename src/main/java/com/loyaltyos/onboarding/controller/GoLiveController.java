@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.response.GoLiveActivateResponse;
-import com.loyaltyos.onboarding.dto.response.GoLiveChecklistResponse;
+import com.loyaltyos.onboarding.dto.GoLiveActivateResponse;
+import com.loyaltyos.onboarding.dto.GoLiveChecklistResponse;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.GoLiveService;
 import io.swagger.v3.oas.annotations.Operation;

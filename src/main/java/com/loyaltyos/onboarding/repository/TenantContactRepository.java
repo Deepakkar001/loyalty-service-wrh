@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.TenantContact;
-import com.loyaltyos.onboarding.domain.enums.ContactRole;
+import com.loyaltyos.onboarding.entity.TenantContact;
+import com.loyaltyos.onboarding.enums.ContactRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

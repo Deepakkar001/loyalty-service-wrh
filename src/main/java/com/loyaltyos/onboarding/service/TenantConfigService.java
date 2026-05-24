@@ -3,15 +3,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.TenantConfig;
-import com.loyaltyos.onboarding.domain.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.domain.entity.TierDefinition;
-import com.loyaltyos.onboarding.domain.entity.WebhookSubscription;
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.domain.enums.TierThresholdType;
-import com.loyaltyos.onboarding.dto.request.ProgrammeConfigRequest;
-import com.loyaltyos.onboarding.dto.response.ProgrammeConfigResponse;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.TenantConfig;
+import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.entity.TierDefinition;
+import com.loyaltyos.onboarding.entity.WebhookSubscription;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.TierThresholdType;
+import com.loyaltyos.onboarding.dto.ProgrammeConfigRequest;
+import com.loyaltyos.onboarding.dto.ProgrammeConfigResponse;
 // import com.loyaltyos.onboarding.event.ProgrammeConfigUpdatedEvent; // with Kafka publish
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
@@ -22,7 +22,7 @@ import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
 import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
-import com.loyaltyos.onboarding.rules.service.RuleCacheService;
+import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 // import org.springframework.kafka.core.KafkaTemplate; // re-enable with Kafka
 import org.springframework.stereotype.Service;
@@ -161,7 +161,7 @@ public class TenantConfigService {
             p.setActiveConfigVersion(newVersion);
             programmeRepository.save(p);
         });
-        com.loyaltyos.onboarding.domain.entity.ProgrammeConfig pc = com.loyaltyos.onboarding.domain.entity.ProgrammeConfig.builder()
+        com.loyaltyos.onboarding.entity.ProgrammeConfig pc = com.loyaltyos.onboarding.entity.ProgrammeConfig.builder()
             .tenantId(tenantId)
             .programmeUid("default")
             .configVersion(cfg.getProgrammeConfigVersion())
@@ -231,11 +231,11 @@ public class TenantConfigService {
 
     private void ensureDefaultProgrammeExists(String tenantId, String programmeName) {
         if (programmeRepository.existsByTenantIdAndProgrammeUid(tenantId, "default")) return;
-        com.loyaltyos.onboarding.domain.entity.Programme p = com.loyaltyos.onboarding.domain.entity.Programme.builder()
+        com.loyaltyos.onboarding.entity.Programme p = com.loyaltyos.onboarding.entity.Programme.builder()
             .tenantId(tenantId)
             .programmeUid("default")
             .name(programmeName == null ? "Default Programme" : programmeName.trim())
-            .status(com.loyaltyos.onboarding.domain.entity.Programme.ProgrammeStatus.DRAFT)
+            .status(com.loyaltyos.onboarding.entity.Programme.ProgrammeStatus.DRAFT)
             .activeConfigVersion(0)
             .build();
         programmeRepository.save(Objects.requireNonNull(p, "programme"));

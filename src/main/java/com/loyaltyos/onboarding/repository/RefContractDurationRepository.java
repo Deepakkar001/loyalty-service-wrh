@@ -1,6 +1,6 @@
 package com.loyaltyos.onboarding.repository;
 
-import com.loyaltyos.onboarding.domain.entity.RefContractDuration;
+import com.loyaltyos.onboarding.entity.RefContractDuration;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

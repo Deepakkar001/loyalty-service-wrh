@@ -1,7 +1,7 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.LoginRequest;
-import com.loyaltyos.onboarding.dto.response.LoginResponse;
+import com.loyaltyos.onboarding.dto.LoginRequest;
+import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.security.JwtProperties;
 import com.loyaltyos.onboarding.service.TenantAuthService;
 import io.swagger.v3.oas.annotations.Operation;

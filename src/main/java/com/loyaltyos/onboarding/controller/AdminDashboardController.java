@@ -1,9 +1,9 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.response.AdminDashboardStats;
-import com.loyaltyos.onboarding.dto.response.AdminTenantDetail;
-import com.loyaltyos.onboarding.dto.response.AdminTenantListItem;
-import com.loyaltyos.onboarding.dto.response.AuditLogItem;
+import com.loyaltyos.onboarding.dto.AdminDashboardStats;
+import com.loyaltyos.onboarding.dto.AdminTenantDetail;
+import com.loyaltyos.onboarding.dto.AdminTenantListItem;
+import com.loyaltyos.onboarding.dto.AuditLogItem;
 import com.loyaltyos.onboarding.service.AdminDashboardService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

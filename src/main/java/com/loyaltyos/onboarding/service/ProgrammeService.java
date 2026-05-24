@@ -2,17 +2,17 @@ package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loyaltyos.onboarding.domain.entity.OnboardingAuditLog;
-import com.loyaltyos.onboarding.domain.entity.Programme;
-import com.loyaltyos.onboarding.domain.entity.ProgrammeConfig;
+import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
+import com.loyaltyos.onboarding.entity.Programme;
+import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 // import com.loyaltyos.onboarding.event.ProgrammeConfigUpdatedEvent; // with Kafka publish
-import com.loyaltyos.onboarding.domain.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeConfigRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import com.loyaltyos.onboarding.rules.service.RuleCacheService;
+import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 // import org.springframework.kafka.core.KafkaTemplate; // re-enable with Kafka
 import org.springframework.stereotype.Service;

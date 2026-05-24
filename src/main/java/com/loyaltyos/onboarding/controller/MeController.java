@@ -1,9 +1,9 @@
 package com.loyaltyos.onboarding.controller;
 
-import com.loyaltyos.onboarding.dto.request.SubmitAgreementRequest;
-import com.loyaltyos.onboarding.dto.request.UpdateIdentityRequest;
-import com.loyaltyos.onboarding.dto.request.UpdateProfileRequest;
-import com.loyaltyos.onboarding.dto.response.TenantStatusResponse;
+import com.loyaltyos.onboarding.dto.SubmitAgreementRequest;
+import com.loyaltyos.onboarding.dto.UpdateIdentityRequest;
+import com.loyaltyos.onboarding.dto.UpdateProfileRequest;
+import com.loyaltyos.onboarding.dto.TenantStatusResponse;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.TenantAgreementService;
 import com.loyaltyos.onboarding.service.TenantRegistrationService;

@@ -5,7 +5,7 @@ import com.loyaltyos.campaigns.model.CampaignAwardType;
 import com.loyaltyos.campaigns.model.CampaignBuiltAward;
 import com.loyaltyos.campaigns.model.CampaignEventContext;
 import com.loyaltyos.campaigns.model.CampaignOfferConfig;
-import com.loyaltyos.onboarding.rewards.dto.RewardIssueCommandDto;
+import com.loyaltyos.rewards.dto.RewardIssueCommandDto;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -27,7 +27,7 @@ public class CampaignRewardCommandBuilder {
     /**
      * Computes award amounts and optional ledger commands for each applying campaign.
      *
-     * @param finalRulePoints {@link com.loyaltyos.onboarding.rules.dto.RuleEvaluationResponse#getFinalPointsAwarded()}
+     * @param finalRulePoints {@link com.loyaltyos.rules.dto.RuleEvaluationResponse#getFinalPointsAwarded()}
      */
     public List<CampaignBuiltAward> build(
         List<Campaign> applyingCampaigns,
