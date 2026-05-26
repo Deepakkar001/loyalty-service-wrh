@@ -16,6 +16,8 @@ import java.util.Set;
 import com.loyaltyos.rules.evaluation.ConditionParseException;
 import com.loyaltyos.rules.evaluation.ConditionTreeParser;
 import com.loyaltyos.rules.evaluation.SpelEvaluationService;
+import com.loyaltyos.rewards.catalog.RewardCatalogItem;
+import com.loyaltyos.rewards.catalog.RewardCatalogService;
 import com.loyaltyos.rules.repository.EarnRuleRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Objects;
@@ -54,6 +56,7 @@ public class RuleEvaluationService {
     private final ObjectMapper objectMapper;
     private final RuleEvaluationAuditWriter auditWriter;
     private final RuleEarningCapService ruleEarningCapService;
+    private final RewardCatalogService rewardCatalogService;
     private final ObjectProvider<MeterRegistry> meterRegistry;
 
     public RuleEvaluationService(
@@ -66,6 +69,7 @@ public class RuleEvaluationService {
         ObjectMapper objectMapper,
         RuleEvaluationAuditWriter auditWriter,
         RuleEarningCapService ruleEarningCapService,
+        RewardCatalogService rewardCatalogService,
         ObjectProvider<MeterRegistry> meterRegistry
     ) {
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
@@ -77,6 +81,7 @@ public class RuleEvaluationService {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.auditWriter = Objects.requireNonNull(auditWriter, "auditWriter");
         this.ruleEarningCapService = Objects.requireNonNull(ruleEarningCapService, "ruleEarningCapService");
+        this.rewardCatalogService = Objects.requireNonNull(rewardCatalogService, "rewardCatalogService");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     }
 
@@ -140,6 +145,7 @@ public class RuleEvaluationService {
                     .matchedRules(List.of())
                     .suppressedRules(List.of())
                     .rewardCommands(List.of())
+                    .catalogGrants(List.of())
                     .success(true)
                     .message("No match")
                     .evaluationTrace(trace)
@@ -152,7 +158,9 @@ public class RuleEvaluationService {
 
             List<MatchOutcome> outcomes = List.of(new MatchOutcome(snapshot, baseThisRule, pointsThisRule));
             List<RuleEvaluationResponse.SuppressedRuleInfo> suppressed = new ArrayList<>();
-            ConflictResult conflict = applyConflictPolicy(outcomes, progCtx.getConflictDefaultStrategy(), suppressed, trace);
+            ConflictResult conflict = applyConflictPolicy(
+                tenantId, programmeUid, outcomes, progCtx.getConflictDefaultStrategy(), suppressed, trace
+            );
 
             BigDecimal aggregateBeforeCap = conflict.pointsTotal();
             BigDecimal capped = ruleEarningCapService.clipToCaps(
@@ -163,6 +171,7 @@ public class RuleEvaluationService {
             List<RuleEvaluationResponse.RewardCommand> commands = scaleCommandsToTotal(
                 conflict.commands(), capped, tenantId, programmeUid, request
             );
+            trace.set("catalogGrants", objectMapper.valueToTree(conflict.catalogGrants()));
 
             return rb
                 .basePointsCalculated(conflict.baseTotal())
@@ -171,8 +180,9 @@ public class RuleEvaluationService {
                 .matchedRules(conflict.matched())
                 .suppressedRules(suppressed)
                 .rewardCommands(commands)
+                .catalogGrants(conflict.catalogGrants())
                 .success(true)
-                .message("Evaluation complete. " + conflict.matched().size() + " rule(s) matched.")
+                .message(buildEvaluationMessage(conflict))
                 .evaluationTrace(trace)
                 .build();
         } catch (Exception e) {
@@ -235,7 +245,9 @@ public class RuleEvaluationService {
             }
 
             List<RuleEvaluationResponse.SuppressedRuleInfo> suppressed = new ArrayList<>();
-            ConflictResult conflict = applyConflictPolicy(outcomes, progCtx.getConflictDefaultStrategy(), suppressed, trace);
+            ConflictResult conflict = applyConflictPolicy(
+                tenantId, programmeUid, outcomes, progCtx.getConflictDefaultStrategy(), suppressed, trace
+            );
 
             BigDecimal tierMult = progCtx.getResolvedTierMultiplier();
             BigDecimal baseTotal = conflict.baseTotal();
@@ -266,6 +278,7 @@ public class RuleEvaluationService {
                 conflict.matched().stream().map(RuleEvaluationResponse.MatchedRuleInfo::getRuleUid).toList()));
             trace.put("finalPoints", finalPoints.toPlainString());
             trace.put("capsRedisEnabled", rulesProperties.isCapsRedisEnabled());
+            trace.set("catalogGrants", objectMapper.valueToTree(conflict.catalogGrants()));
 
             BigDecimal dayRem = ruleEarningCapService.dailyRemaining(tenantId, programmeUid, request.getCustomerId(), progCtx.getDailyCap(), now);
             BigDecimal monthRem = ruleEarningCapService.monthlyRemaining(tenantId, programmeUid, request.getCustomerId(), progCtx.getMonthlyCap(), now);
@@ -279,8 +292,9 @@ public class RuleEvaluationService {
                 .matchedRules(conflict.matched())
                 .suppressedRules(suppressed)
                 .rewardCommands(commands)
+                .catalogGrants(conflict.catalogGrants())
                 .success(true)
-                .message("Evaluation complete. " + conflict.matched().size() + " rule(s) matched.")
+                .message(buildEvaluationMessage(conflict))
                 .evaluationTrace(trace)
                 .build();
 
@@ -303,23 +317,35 @@ public class RuleEvaluationService {
     private record ConflictResult(
         List<RuleEvaluationResponse.MatchedRuleInfo> matched,
         List<RuleEvaluationResponse.RewardCommand> commands,
+        List<RuleEvaluationResponse.CatalogGrantInfo> catalogGrants,
         BigDecimal baseTotal,
         BigDecimal pointsTotal
     ) {
     }
 
+    private static String buildEvaluationMessage(ConflictResult conflict) {
+        int rules = conflict.matched().size();
+        int grants = conflict.catalogGrants() == null ? 0 : conflict.catalogGrants().size();
+        if (grants > 0) {
+            return "Evaluation complete. " + rules + " rule(s) matched; " + grants + " catalog grant(s).";
+        }
+        return "Evaluation complete. " + rules + " rule(s) matched.";
+    }
+
     private ConflictResult applyConflictPolicy(
+        String tenantId,
+        String programmeUid,
         List<MatchOutcome> outcomes,
         String strategy,
         List<RuleEvaluationResponse.SuppressedRuleInfo> suppressed,
         ObjectNode trace
     ) {
         if (outcomes.isEmpty()) {
-            return new ConflictResult(List.of(), List.of(), BigDecimal.ZERO, BigDecimal.ZERO);
+            return new ConflictResult(List.of(), List.of(), List.of(), BigDecimal.ZERO, BigDecimal.ZERO);
         }
         boolean business = "BEST_FOR_BUSINESS".equalsIgnoreCase(strategy);
         if (!business || outcomes.size() == 1) {
-            return buildSumResult(outcomes);
+            return buildSumResult(tenantId, programmeUid, outcomes);
         }
 
         Optional<BigDecimal> minPositive = outcomes.stream()
@@ -351,12 +377,13 @@ public class RuleEvaluationService {
         }
         trace.put("conflictResolution", "BEST_FOR_BUSINESS_SINGLE_WINNER");
         trace.put("winnerRuleUid", winner.rule().getRuleUid());
-        return buildSumResult(List.of(winner));
+        return buildSumResult(tenantId, programmeUid, List.of(winner));
     }
 
-    private ConflictResult buildSumResult(List<MatchOutcome> outcomes) {
+    private ConflictResult buildSumResult(String tenantId, String programmeUid, List<MatchOutcome> outcomes) {
         List<RuleEvaluationResponse.MatchedRuleInfo> matched = new ArrayList<>();
         List<RuleEvaluationResponse.RewardCommand> commands = new ArrayList<>();
+        List<RuleEvaluationResponse.CatalogGrantInfo> catalogGrants = new ArrayList<>();
         BigDecimal base = BigDecimal.ZERO;
         BigDecimal pts = BigDecimal.ZERO;
         for (MatchOutcome o : outcomes) {
@@ -368,6 +395,7 @@ public class RuleEvaluationService {
                 .build());
             base = base.add(o.basePoints());
             pts = pts.add(o.pointsAfterTier());
+            catalogGrants.addAll(collectCatalogGrantsFromRule(tenantId, programmeUid, o.rule()));
             if (o.pointsAfterTier().compareTo(BigDecimal.ZERO) > 0) {
                 commands.add(RuleEvaluationResponse.RewardCommand.builder()
                     .commandId(UUID.randomUUID().toString())
@@ -376,7 +404,67 @@ public class RuleEvaluationService {
                     .build());
             }
         }
-        return new ConflictResult(matched, commands, base, pts);
+        return new ConflictResult(matched, commands, catalogGrants, base, pts);
+    }
+
+    private List<RuleEvaluationResponse.CatalogGrantInfo> collectCatalogGrantsFromRule(
+        String tenantId,
+        String programmeUid,
+        CachedRuleSnapshot rule
+    ) {
+        List<RuleEvaluationResponse.CatalogGrantInfo> grants = new ArrayList<>();
+        if (rule.getActions() == null) {
+            return grants;
+        }
+        for (CachedActionSnapshot action : rule.getActions()) {
+            if (action.getActionType() == null || !ActionType.ISSUE_VOUCHER.name().equals(action.getActionType())) {
+                continue;
+            }
+            String catalogUid = extractCatalogRewardUid(action);
+            if (catalogUid == null) {
+                grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                    .sourceRuleUid(rule.getRuleUid())
+                    .ruleName(rule.getName())
+                    .valid(false)
+                    .errorMessage("ISSUE_VOUCHER action is missing catalogRewardUid in config")
+                    .build());
+                continue;
+            }
+            Optional<RewardCatalogItem> item = rewardCatalogService.findActiveItem(tenantId, programmeUid, catalogUid);
+            if (item.isEmpty()) {
+                grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                    .sourceRuleUid(rule.getRuleUid())
+                    .ruleName(rule.getName())
+                    .catalogRewardUid(catalogUid)
+                    .valid(false)
+                    .errorMessage("Unknown or inactive catalog reward: " + catalogUid)
+                    .build());
+                continue;
+            }
+            RewardCatalogItem catalogItem = item.get();
+            grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                .sourceRuleUid(rule.getRuleUid())
+                .ruleName(rule.getName())
+                .catalogRewardUid(catalogItem.rewardUid())
+                .catalogRewardName(catalogItem.name())
+                .catalogRewardType(catalogItem.rewardType())
+                .catalogPointsCost(catalogItem.pointsCost())
+                .valid(true)
+                .build());
+        }
+        return grants;
+    }
+
+    private static String extractCatalogRewardUid(CachedActionSnapshot action) {
+        if (action.getConfig() == null || action.getConfig().isMissingNode() || !action.getConfig().isObject()) {
+            return null;
+        }
+        var uidNode = action.getConfig().get("catalogRewardUid");
+        if (uidNode == null || !uidNode.isTextual()) {
+            return null;
+        }
+        String uid = uidNode.asText().trim();
+        return uid.isEmpty() ? null : uid;
     }
 
     private List<RuleEvaluationResponse.RewardCommand> scaleCommandsToTotal(

@@ -26,6 +26,9 @@ public class RuleEvaluationResponse {
 
     private List<RewardCommand> rewardCommands = new ArrayList<>();
 
+    /** Voucher / catalog benefits from ISSUE_VOUCHER actions (sandbox + dry-run). */
+    private List<CatalogGrantInfo> catalogGrants = new ArrayList<>();
+
     private boolean success;
     private String message;
 
@@ -104,6 +107,71 @@ public class RuleEvaluationResponse {
         public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
         public String getReason() { return reason; }
         public void setReason(String reason) { this.reason = reason; }
+    }
+
+    public static class CatalogGrantInfo {
+        private String sourceRuleUid;
+        private String ruleName;
+        private String catalogRewardUid;
+        private String catalogRewardName;
+        private String catalogRewardType;
+        private BigDecimal catalogPointsCost;
+        private boolean valid;
+        private String errorMessage;
+
+        public CatalogGrantInfo() {}
+
+        public static Builder builder() { return new Builder(); }
+
+        public static final class Builder {
+            private String sourceRuleUid;
+            private String ruleName;
+            private String catalogRewardUid;
+            private String catalogRewardName;
+            private String catalogRewardType;
+            private BigDecimal catalogPointsCost;
+            private boolean valid = true;
+            private String errorMessage;
+
+            public Builder sourceRuleUid(String v) { this.sourceRuleUid = v; return this; }
+            public Builder ruleName(String v) { this.ruleName = v; return this; }
+            public Builder catalogRewardUid(String v) { this.catalogRewardUid = v; return this; }
+            public Builder catalogRewardName(String v) { this.catalogRewardName = v; return this; }
+            public Builder catalogRewardType(String v) { this.catalogRewardType = v; return this; }
+            public Builder catalogPointsCost(BigDecimal v) { this.catalogPointsCost = v; return this; }
+            public Builder valid(boolean v) { this.valid = v; return this; }
+            public Builder errorMessage(String v) { this.errorMessage = v; return this; }
+
+            public CatalogGrantInfo build() {
+                CatalogGrantInfo g = new CatalogGrantInfo();
+                g.sourceRuleUid = sourceRuleUid;
+                g.ruleName = ruleName;
+                g.catalogRewardUid = catalogRewardUid;
+                g.catalogRewardName = catalogRewardName;
+                g.catalogRewardType = catalogRewardType;
+                g.catalogPointsCost = catalogPointsCost;
+                g.valid = valid;
+                g.errorMessage = errorMessage;
+                return g;
+            }
+        }
+
+        public String getSourceRuleUid() { return sourceRuleUid; }
+        public void setSourceRuleUid(String sourceRuleUid) { this.sourceRuleUid = sourceRuleUid; }
+        public String getRuleName() { return ruleName; }
+        public void setRuleName(String ruleName) { this.ruleName = ruleName; }
+        public String getCatalogRewardUid() { return catalogRewardUid; }
+        public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
+        public String getCatalogRewardName() { return catalogRewardName; }
+        public void setCatalogRewardName(String catalogRewardName) { this.catalogRewardName = catalogRewardName; }
+        public String getCatalogRewardType() { return catalogRewardType; }
+        public void setCatalogRewardType(String catalogRewardType) { this.catalogRewardType = catalogRewardType; }
+        public BigDecimal getCatalogPointsCost() { return catalogPointsCost; }
+        public void setCatalogPointsCost(BigDecimal catalogPointsCost) { this.catalogPointsCost = catalogPointsCost; }
+        public boolean isValid() { return valid; }
+        public void setValid(boolean valid) { this.valid = valid; }
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     }
 
     public static class RewardCommand {
@@ -206,6 +274,7 @@ public class RuleEvaluationResponse {
         List<MatchedRuleInfo> matchedRules,
         List<SuppressedRuleInfo> suppressedRules,
         List<RewardCommand> rewardCommands,
+        List<CatalogGrantInfo> catalogGrants,
         boolean success,
         String message,
         JsonNode evaluationTrace
@@ -222,6 +291,7 @@ public class RuleEvaluationResponse {
         this.matchedRules = matchedRules != null ? matchedRules : new ArrayList<>();
         this.suppressedRules = suppressedRules != null ? suppressedRules : new ArrayList<>();
         this.rewardCommands = rewardCommands != null ? rewardCommands : new ArrayList<>();
+        this.catalogGrants = catalogGrants != null ? catalogGrants : new ArrayList<>();
         this.success = success;
         this.message = message;
         this.evaluationTrace = evaluationTrace;
@@ -242,6 +312,7 @@ public class RuleEvaluationResponse {
         private List<MatchedRuleInfo> matchedRules = new ArrayList<>();
         private List<SuppressedRuleInfo> suppressedRules = new ArrayList<>();
         private List<RewardCommand> rewardCommands = new ArrayList<>();
+        private List<CatalogGrantInfo> catalogGrants = new ArrayList<>();
         private boolean success;
         private String message;
         private JsonNode evaluationTrace;
@@ -260,6 +331,7 @@ public class RuleEvaluationResponse {
         public Builder matchedRules(List<MatchedRuleInfo> matchedRules) { this.matchedRules = matchedRules != null ? matchedRules : new ArrayList<>(); return this; }
         public Builder suppressedRules(List<SuppressedRuleInfo> suppressedRules) { this.suppressedRules = suppressedRules != null ? suppressedRules : new ArrayList<>(); return this; }
         public Builder rewardCommands(List<RewardCommand> rewardCommands) { this.rewardCommands = rewardCommands != null ? rewardCommands : new ArrayList<>(); return this; }
+        public Builder catalogGrants(List<CatalogGrantInfo> catalogGrants) { this.catalogGrants = catalogGrants != null ? catalogGrants : new ArrayList<>(); return this; }
         public Builder success(boolean success) { this.success = success; return this; }
         public Builder message(String message) { this.message = message; return this; }
         public Builder evaluationTrace(JsonNode evaluationTrace) { this.evaluationTrace = evaluationTrace; return this; }
@@ -269,7 +341,7 @@ public class RuleEvaluationResponse {
                 tenantId, programmeUid, customerId, eventId,
                 basePointsCalculated, tierMultiplier, finalPointsAwarded,
                 dailyCapRemaining, monthlyCapRemaining,
-                matchedRules, suppressedRules, rewardCommands,
+                matchedRules, suppressedRules, rewardCommands, catalogGrants,
                 success, message, evaluationTrace
             );
         }
@@ -299,6 +371,8 @@ public class RuleEvaluationResponse {
     public void setSuppressedRules(List<SuppressedRuleInfo> suppressedRules) { this.suppressedRules = suppressedRules != null ? suppressedRules : new ArrayList<>(); }
     public List<RewardCommand> getRewardCommands() { return rewardCommands; }
     public void setRewardCommands(List<RewardCommand> rewardCommands) { this.rewardCommands = rewardCommands != null ? rewardCommands : new ArrayList<>(); }
+    public List<CatalogGrantInfo> getCatalogGrants() { return catalogGrants; }
+    public void setCatalogGrants(List<CatalogGrantInfo> catalogGrants) { this.catalogGrants = catalogGrants != null ? catalogGrants : new ArrayList<>(); }
     public boolean isSuccess() { return success; }
     public void setSuccess(boolean success) { this.success = success; }
     public String getMessage() { return message; }

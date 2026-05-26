@@ -2,14 +2,13 @@ package com.loyaltyos.integration.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.loyaltyos.campaigns.dto.LoyaltyEventProcessRequest;
 import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse;
 import com.loyaltyos.campaigns.service.CampaignOrchestrationService;
 import com.loyaltyos.integration.dto.EventIdempotentReplayResponse;
 import com.loyaltyos.integration.dto.EventProcessingResponse;
 import com.loyaltyos.integration.dto.EventStatusResponse;
-import com.loyaltyos.integration.dto.IntegrationEventRequest;
+import com.loyaltyos.integration.dto.IntegrationParsedEvent;
 import com.loyaltyos.integration.dto.ValidationResponse;
 import com.loyaltyos.integration.entity.IntegrationEventProcessingLog;
 import com.loyaltyos.integration.enums.EventProcessingStatus;
@@ -61,37 +60,37 @@ public class IntegrationEventService {
     @Transactional
     public Object processEvent(
         String tenantId,
-        IntegrationEventRequest request,
+        IntegrationParsedEvent parsed,
         String apiKeyUid,
         String requestBody,
         String requestPayloadHash
     ) {
-        Optional<EventProcessingResponse> cached = idempotencyService.getCachedResponse(tenantId, request.getEventId());
+        Optional<EventProcessingResponse> cached = idempotencyService.getCachedResponse(tenantId, parsed.eventId());
         if (cached.isPresent()) {
-            return buildIdempotentReplay(request.getEventId(), cached.get());
+            return buildIdempotentReplay(parsed.eventId(), cached.get());
         }
 
         long start = System.currentTimeMillis();
-        LoyaltyEventProcessRequest coreReq = toCoreRequest(request);
+        LoyaltyEventProcessRequest coreReq = toCoreRequest(parsed);
 
         LoyaltyEventProcessResponse core = campaignOrchestrationService.process(tenantId, coreReq);
         int processingTimeMs = (int) (System.currentTimeMillis() - start);
 
         if (core.isIdempotentReplay()) {
-            Optional<EventProcessingResponse> fromCache = idempotencyService.getCachedResponse(tenantId, request.getEventId());
+            Optional<EventProcessingResponse> fromCache = idempotencyService.getCachedResponse(tenantId, parsed.eventId());
             if (fromCache.isPresent()) {
-                return buildIdempotentReplay(request.getEventId(), fromCache.get());
+                return buildIdempotentReplay(parsed.eventId(), fromCache.get());
             }
-            EventProcessingResponse rebuilt = responseMapper.toSuccessResponse(request, core, null, processingTimeMs);
-            idempotencyService.cacheResponse(tenantId, request.getEventId(), rebuilt);
-            return buildIdempotentReplay(request.getEventId(), rebuilt);
+            EventProcessingResponse rebuilt = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
+            idempotencyService.cacheResponse(tenantId, parsed.eventId(), rebuilt);
+            return buildIdempotentReplay(parsed.eventId(), rebuilt);
         }
 
         if (!core.isSuccess()) {
-            EventProcessingResponse failure = responseMapper.toSuccessResponse(request, core, null, processingTimeMs);
+            EventProcessingResponse failure = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
             failure.setStatus("ERROR");
             persistProcessingLog(
-                tenantId, request, apiKeyUid, core, failure, requestPayloadHash, processingTimeMs, null
+                tenantId, parsed, apiKeyUid, core, failure, requestPayloadHash, processingTimeMs, null
             );
             throw new IntegrationApiException(
                 HttpStatus.BAD_REQUEST,
@@ -101,26 +100,25 @@ public class IntegrationEventService {
             );
         }
 
-        EventProcessingResponse response = responseMapper.toSuccessResponse(request, core, null, processingTimeMs);
+        EventProcessingResponse response = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
         persistProcessingLog(
-            tenantId, request, apiKeyUid, core, response, requestPayloadHash,
+            tenantId, parsed, apiKeyUid, core, response, requestPayloadHash,
             processingTimeMs, null
         );
-        idempotencyService.cacheResponse(tenantId, request.getEventId(), response);
+        idempotencyService.cacheResponse(tenantId, parsed.eventId(), response);
         return response;
     }
 
-    public ValidationResponse validateEvent(String tenantId, IntegrationEventRequest request) {
-        Map<String, Object> payload = toValidationPayload(request);
+    public ValidationResponse validateEvent(String tenantId, IntegrationParsedEvent parsed) {
         SandboxValidateEventRequest sandboxReq = new SandboxValidateEventRequest();
         try {
-            sandboxReq.setPayloadJson(objectMapper.writeValueAsString(payload));
+            sandboxReq.setPayloadJson(objectMapper.writeValueAsString(parsed.schemaPayload()));
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid event payload");
         }
 
         ValidationResponse response = new ValidationResponse();
-        response.setEventId(request.getEventId());
+        response.setEventId(parsed.eventId());
         response.setTimestamp(Instant.now());
         response.setNote("Dry-run validation only — no rewards issued.");
 
@@ -230,86 +228,22 @@ public class IntegrationEventService {
         return replay;
     }
 
-    private LoyaltyEventProcessRequest toCoreRequest(IntegrationEventRequest request) {
-        Map<String, Object> payload = buildIntegrationPayloadFields(request);
+    private LoyaltyEventProcessRequest toCoreRequest(IntegrationParsedEvent parsed) {
         LoyaltyEventProcessRequest core = new LoyaltyEventProcessRequest();
-        core.setProgrammeUid(stringField(payload, "programmeUid", "default"));
-        core.setCustomerId(request.getCustomerId());
-        core.setCustomerTierUid(request.getCustomerTierUid());
-        core.setEventType(request.getEventType());
-        core.setTransactionId(request.getEventId());
-        core.setAmount(request.getAmount());
-        Map<String, Object> metadata = extractMetadata(payload);
-        if (!metadata.isEmpty()) {
-            core.setMetadata(metadata);
-        }
-        ObjectNode eventPayload = objectMapper.createObjectNode();
-        payload.forEach((key, value) -> eventPayload.set(key, objectMapper.valueToTree(value)));
-        core.setEventPayload(eventPayload);
+        core.setProgrammeUid(parsed.programmeUid());
+        core.setCustomerId(parsed.customerId());
+        core.setEventType(parsed.eventType());
+        core.setTransactionId(parsed.eventId());
+        core.setAmount(parsed.amount());
+        core.setCustomerTierUid(parsed.customerTierUid());
+        core.setMetadata(parsed.metadata().isEmpty() ? null : new LinkedHashMap<>(parsed.metadata()));
+        core.setEventPayload(parsed.eventPayload());
         return core;
-    }
-
-    private Map<String, Object> toValidationPayload(IntegrationEventRequest request) {
-        return buildIntegrationPayloadFields(request);
-    }
-
-  /** Flat event map used for schema validation (validate + process paths). */
-    private static Map<String, Object> buildIntegrationPayloadFields(IntegrationEventRequest request) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("eventType", request.getEventType());
-        payload.put("transactionId", request.getEventId());
-        payload.put("customerId", request.getCustomerId());
-        payload.put("amount", request.getAmount());
-        if (request.getProgrammeUid() != null && !request.getProgrammeUid().isBlank()) {
-            payload.put("programmeUid", request.getProgrammeUid());
-        }
-        if (request.getTimestamp() != null) {
-            payload.put("timestamp", request.getTimestamp().toString());
-        }
-        putIfPresent(payload, "currency", request.getCurrency());
-        putIfPresent(payload, "channel", request.getChannel());
-        putIfPresent(payload, "merchantId", request.getMerchantId());
-        putIfPresent(payload, "transactionRef", request.getTransactionRef());
-        if (request.getCustomerTierUid() != null) {
-            payload.put("tierUid", request.getCustomerTierUid());
-        }
-        if (request.getMetadata() != null) {
-            request.getMetadata().forEach(payload::putIfAbsent);
-        }
-        return payload;
-    }
-
-    private static Map<String, Object> extractMetadata(Map<String, Object> payload) {
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        payload.forEach((key, value) -> {
-            if (!CORE_PAYLOAD_KEYS.contains(key)) {
-                metadata.put(key, value);
-            }
-        });
-        return metadata;
-    }
-
-    private static final java.util.Set<String> CORE_PAYLOAD_KEYS = java.util.Set.of(
-        "programmeUid", "customerId", "eventType", "transactionId", "amount"
-    );
-
-    private static void putIfPresent(Map<String, Object> target, String key, String value) {
-        if (value != null && !value.isBlank()) {
-            target.put(key, value);
-        }
-    }
-
-    private static String stringField(Map<String, Object> payload, String key, String defaultValue) {
-        Object value = payload.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return defaultValue;
-        }
-        return String.valueOf(value);
     }
 
     private void persistProcessingLog(
         String tenantId,
-        IntegrationEventRequest request,
+        IntegrationParsedEvent parsed,
         String apiKeyUid,
         LoyaltyEventProcessResponse core,
         EventProcessingResponse response,
@@ -318,13 +252,13 @@ public class IntegrationEventService {
         RuleEvaluationResponse ruleEval
     ) {
         IntegrationEventProcessingLog log = processingLogRepository
-            .findByTenantIdAndEventId(tenantId, request.getEventId())
+            .findByTenantIdAndEventId(tenantId, parsed.eventId())
             .orElseGet(IntegrationEventProcessingLog::new);
         log.setTenantId(tenantId);
-        log.setEventId(request.getEventId());
-        log.setCustomerId(request.getCustomerId());
-        log.setAmount(request.getAmount());
-        log.setEventType(request.getEventType());
+        log.setEventId(parsed.eventId());
+        log.setCustomerId(parsed.customerId());
+        log.setAmount(parsed.amount());
+        log.setEventType(parsed.eventType());
         log.setApiKeyUid(apiKeyUid);
         log.setProcessingStatus(core.isSuccess() ? EventProcessingStatus.SUCCESS : EventProcessingStatus.RULE_ERROR);
         log.setHttpStatus(core.isSuccess() ? 200 : 400);

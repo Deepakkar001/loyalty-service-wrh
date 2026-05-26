@@ -4,7 +4,6 @@ import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
 import com.loyaltyos.onboarding.dto.SandboxValidateEventRequest;
 import com.loyaltyos.onboarding.dto.ApiKeyGeneratedResponse;
 import com.loyaltyos.onboarding.dto.ApiKeySummaryResponse;
-import com.loyaltyos.onboarding.dto.WebhookStatusResponse;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import com.loyaltyos.onboarding.service.IntegrationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@Tag(name = "Integration", description = "Stage 5: API keys, webhook verification, sandbox validation")
+@Tag(name = "Integration", description = "Stage 5: API keys and sandbox validation")
 public class IntegrationController {
 
     private final IntegrationService integrationService;
@@ -74,20 +73,6 @@ public class IntegrationController {
     public ResponseEntity<List<ApiKeySummaryResponse>> getCredentialSummaries(@AuthenticationPrincipal Jwt jwt) {
         String tenantId = TenantJwt.tenantId(jwt);
         return ResponseEntity.ok(integrationService.getKeySummaries(tenantId));
-    }
-
-    @PostMapping("/api/v1/me/integration/webhook/verify")
-    @Operation(summary = "Verify webhook endpoint")
-    public ResponseEntity<WebhookStatusResponse> verifyWebhook(@AuthenticationPrincipal Jwt jwt) {
-        String tenantId = TenantJwt.tenantId(jwt);
-        return ResponseEntity.ok(integrationService.verifyWebhook(tenantId));
-    }
-
-    @GetMapping("/api/v1/me/integration/webhook/status")
-    @Operation(summary = "Get webhook verification status")
-    public ResponseEntity<WebhookStatusResponse> webhookStatus(@AuthenticationPrincipal Jwt jwt) {
-        String tenantId = TenantJwt.tenantId(jwt);
-        return ResponseEntity.ok(integrationService.getWebhookStatus(tenantId));
     }
 
     @PostMapping("/api/v1/me/integration/sandbox/validate-event")

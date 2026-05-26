@@ -5,6 +5,7 @@ import com.loyaltyos.integration.dto.IntegrationBalanceResponse;
 import com.loyaltyos.integration.dto.IntegrationRedemptionRequest;
 import com.loyaltyos.integration.dto.IntegrationRedemptionResponse;
 import com.loyaltyos.integration.dto.IntegrationRedemptionValidationResponse;
+import com.loyaltyos.integration.dto.IntegrationRewardCatalogResponse;
 import com.loyaltyos.integration.dto.IntegrationTransactionResponse;
 import com.loyaltyos.integration.security.ApiKeyPrincipal;
 import com.loyaltyos.integration.service.IntegrationAuditService;
@@ -12,6 +13,7 @@ import com.loyaltyos.integration.service.IntegrationBalanceService;
 import com.loyaltyos.integration.service.IntegrationEventService;
 import com.loyaltyos.integration.service.IntegrationMetricsService;
 import com.loyaltyos.integration.service.IntegrationRedemptionService;
+import com.loyaltyos.integration.service.IntegrationRewardCatalogService;
 import com.loyaltyos.integration.support.IntegrationAuthSupport;
 import com.loyaltyos.rules.enums.LedgerEntryType;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -50,17 +52,39 @@ public class IntegrationRewardsController {
     private final IntegrationRedemptionService redemptionService;
     private final IntegrationAuditService auditService;
     private final IntegrationMetricsService metricsService;
+    private final IntegrationRewardCatalogService rewardCatalogService;
 
     public IntegrationRewardsController(
         IntegrationBalanceService balanceService,
         IntegrationRedemptionService redemptionService,
         IntegrationAuditService auditService,
-        IntegrationMetricsService metricsService
+        IntegrationMetricsService metricsService,
+        IntegrationRewardCatalogService rewardCatalogService
     ) {
         this.balanceService = Objects.requireNonNull(balanceService, "balanceService");
         this.redemptionService = Objects.requireNonNull(redemptionService, "redemptionService");
         this.auditService = Objects.requireNonNull(auditService, "auditService");
         this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
+        this.rewardCatalogService = Objects.requireNonNull(rewardCatalogService, "rewardCatalogService");
+    }
+
+    @GetMapping("/rewards/catalog")
+    public ResponseEntity<IntegrationRewardCatalogResponse> listRewardCatalog(
+        @PathVariable String tenantId,
+        @RequestParam(defaultValue = "default") String programmeUid,
+        @RequestParam(defaultValue = "true") boolean activeOnly,
+        @AuthenticationPrincipal ApiKeyPrincipal auth,
+        HttpServletRequest servletRequest
+    ) {
+        IntegrationAuthSupport.verifyTenant(auth, tenantId);
+        long start = System.currentTimeMillis();
+        IntegrationRewardCatalogResponse body = rewardCatalogService.listCatalog(tenantId, programmeUid, activeOnly);
+        int processingMs = (int) (System.currentTimeMillis() - start);
+        logGet(tenantId, auth, servletRequest, null, null, "rewards/catalog", 200, processingMs);
+        return ResponseEntity.ok()
+            .header("X-Request-ID", IntegrationAuthSupport.requestId(servletRequest))
+            .header("X-Processing-Time", String.valueOf(processingMs))
+            .body(body);
     }
 
     @GetMapping("/customers/{customerId}/balance")

@@ -14,12 +14,10 @@ import com.loyaltyos.onboarding.repository.SandboxTestEventRepository;
 import com.loyaltyos.onboarding.repository.TenantApiKeyRepository;
 import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.rules.service.RuleEvaluationService;
 import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,7 +33,6 @@ class IntegrationServiceTest {
         var tenantRepo = mock(TenantOnboardingRepository.class);
         var keyRepo = mock(TenantApiKeyRepository.class);
         var cfgRepo = mock(TenantConfigRepository.class);
-        var webhookRepo = mock(WebhookSubscriptionRepository.class);
         var auditRepo = mock(OnboardingAuditLogRepository.class);
         var stateMachine = mock(OnboardingStateMachine.class);
 
@@ -56,10 +53,11 @@ class IntegrationServiceTest {
         when(tenantRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
 
         IntegrationService svc = new IntegrationService(
-            tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
-            new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
+            tenantRepo, keyRepo, cfgRepo, auditRepo, stateMachine,
+            new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
-            mock(IntegrationCredentialCryptoService.class)
+            mock(IntegrationCredentialCryptoService.class),
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
         );
 
         assertThrows(InvalidStateException.class, () -> svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX));
@@ -70,7 +68,6 @@ class IntegrationServiceTest {
         var tenantRepo = mock(TenantOnboardingRepository.class);
         var keyRepo = mock(TenantApiKeyRepository.class);
         var cfgRepo = mock(TenantConfigRepository.class);
-        var webhookRepo = mock(WebhookSubscriptionRepository.class);
         var auditRepo = mock(OnboardingAuditLogRepository.class);
         var stateMachine = mock(OnboardingStateMachine.class);
 
@@ -100,10 +97,11 @@ class IntegrationServiceTest {
         when(crypto.encrypt(any())).thenReturn("enc-test");
 
         IntegrationService svc = new IntegrationService(
-            tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
-            new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
+            tenantRepo, keyRepo, cfgRepo, auditRepo, stateMachine,
+            new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
-            crypto
+            crypto,
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX);
@@ -121,7 +119,6 @@ class IntegrationServiceTest {
         var tenantRepo = mock(TenantOnboardingRepository.class);
         var keyRepo = mock(TenantApiKeyRepository.class);
         var cfgRepo = mock(TenantConfigRepository.class);
-        var webhookRepo = mock(WebhookSubscriptionRepository.class);
         var auditRepo = mock(OnboardingAuditLogRepository.class);
         var stateMachine = mock(OnboardingStateMachine.class);
 
@@ -146,10 +143,11 @@ class IntegrationServiceTest {
         when(crypto.encrypt(any())).thenReturn("enc-test");
 
         IntegrationService svc = new IntegrationService(
-            tenantRepo, keyRepo, cfgRepo, webhookRepo, auditRepo, stateMachine,
-            new ObjectMapper(), new RestTemplateBuilder(), mock(RuleEvaluationService.class),
+            tenantRepo, keyRepo, cfgRepo, auditRepo, stateMachine,
+            new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
-            crypto
+            crypto,
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.PRODUCTION);

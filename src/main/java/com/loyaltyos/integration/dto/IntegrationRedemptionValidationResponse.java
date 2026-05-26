@@ -15,6 +15,9 @@ public class IntegrationRedemptionValidationResponse {
     private BigDecimal pointsToRedeem;
     private Map<String, String> fieldErrors = new LinkedHashMap<>();
     private String note;
+    private String catalogRewardUid;
+    private String catalogRewardName;
+    private String catalogRewardType;
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -32,4 +35,10 @@ public class IntegrationRedemptionValidationResponse {
     public void setFieldErrors(Map<String, String> fieldErrors) { this.fieldErrors = fieldErrors; }
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+    public String getCatalogRewardUid() { return catalogRewardUid; }
+    public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
+    public String getCatalogRewardName() { return catalogRewardName; }
+    public void setCatalogRewardName(String catalogRewardName) { this.catalogRewardName = catalogRewardName; }
+    public String getCatalogRewardType() { return catalogRewardType; }
+    public void setCatalogRewardType(String catalogRewardType) { this.catalogRewardType = catalogRewardType; }
 }

@@ -33,6 +33,9 @@ public class IntegrationRedemptionService {
         out.setPointsToRedeem(core.getPointsToRedeem());
         out.setFieldErrors(core.getFieldErrors());
         out.setNote(core.getNote());
+        out.setCatalogRewardUid(core.getCatalogRewardUid());
+        out.setCatalogRewardName(core.getCatalogRewardName());
+        out.setCatalogRewardType(core.getCatalogRewardType());
         return out;
     }
 
@@ -48,6 +51,9 @@ public class IntegrationRedemptionService {
         out.setLedgerId(core.getLedgerId());
         out.setIdempotentReplay(core.isIdempotentReplay());
         out.setTimestamp(core.getTimestamp());
+        out.setCatalogRewardUid(core.getCatalogRewardUid());
+        out.setCatalogRewardName(core.getCatalogRewardName());
+        out.setCatalogRewardType(core.getCatalogRewardType());
         return out;
     }
 
@@ -60,6 +66,7 @@ public class IntegrationRedemptionService {
         core.setOrderAmount(request.getOrderAmount());
         core.setCurrency(request.getCurrency());
         core.setChannel(request.getChannel());
+        core.setCatalogRewardUid(request.getCatalogRewardUid());
         return core;
     }
 }

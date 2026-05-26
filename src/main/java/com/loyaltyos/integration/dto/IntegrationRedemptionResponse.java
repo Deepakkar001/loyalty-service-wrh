@@ -14,6 +14,9 @@ public class IntegrationRedemptionResponse {
     private Long ledgerId;
     private boolean idempotentReplay;
     private Instant timestamp;
+    private String catalogRewardUid;
+    private String catalogRewardName;
+    private String catalogRewardType;
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -33,4 +36,10 @@ public class IntegrationRedemptionResponse {
     public void setIdempotentReplay(boolean idempotentReplay) { this.idempotentReplay = idempotentReplay; }
     public Instant getTimestamp() { return timestamp; }
     public void setTimestamp(Instant timestamp) { this.timestamp = timestamp; }
+    public String getCatalogRewardUid() { return catalogRewardUid; }
+    public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
+    public String getCatalogRewardName() { return catalogRewardName; }
+    public void setCatalogRewardName(String catalogRewardName) { this.catalogRewardName = catalogRewardName; }
+    public String getCatalogRewardType() { return catalogRewardType; }
+    public void setCatalogRewardType(String catalogRewardType) { this.catalogRewardType = catalogRewardType; }
 }

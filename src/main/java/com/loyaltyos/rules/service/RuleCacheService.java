@@ -107,6 +107,7 @@ public class RuleCacheService {
                     .actionUid(a.getActionUid())
                     .actionType(a.getActionType() != null ? a.getActionType().name() : null)
                     .formula(a.getFormula())
+                    .config(a.getConfig())
                     .build());
             }
         }

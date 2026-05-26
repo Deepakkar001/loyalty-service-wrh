@@ -3,8 +3,10 @@ package com.loyaltyos.integration.controller;
 import com.loyaltyos.integration.dto.EventIdempotentReplayResponse;
 import com.loyaltyos.integration.dto.EventProcessingResponse;
 import com.loyaltyos.integration.dto.EventStatusResponse;
-import com.loyaltyos.integration.dto.IntegrationEventRequest;
 import com.loyaltyos.integration.dto.ValidationResponse;
+import com.loyaltyos.integration.dto.IntegrationParsedEvent;
+import com.loyaltyos.integration.service.IntegrationEventPayloadResolver;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.loyaltyos.integration.entity.ApiRequestAuditLog;
 import com.loyaltyos.integration.security.ApiKeyPrincipal;
 import com.loyaltyos.integration.service.IntegrationAuditService;
@@ -12,7 +14,6 @@ import com.loyaltyos.integration.service.IntegrationEventService;
 import com.loyaltyos.integration.service.IntegrationMetricsService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -34,15 +35,18 @@ import java.util.Objects;
 public class IntegrationApiController {
 
     private final IntegrationEventService integrationEventService;
+    private final IntegrationEventPayloadResolver payloadResolver;
     private final IntegrationAuditService auditService;
     private final IntegrationMetricsService metricsService;
 
     public IntegrationApiController(
         IntegrationEventService integrationEventService,
+        IntegrationEventPayloadResolver payloadResolver,
         IntegrationAuditService auditService,
         IntegrationMetricsService metricsService
     ) {
         this.integrationEventService = Objects.requireNonNull(integrationEventService, "integrationEventService");
+        this.payloadResolver = Objects.requireNonNull(payloadResolver, "payloadResolver");
         this.auditService = Objects.requireNonNull(auditService, "auditService");
         this.metricsService = Objects.requireNonNull(metricsService, "metricsService");
     }
@@ -51,23 +55,24 @@ public class IntegrationApiController {
     public ResponseEntity<?> processEvent(
         @PathVariable String tenantId,
         @AuthenticationPrincipal ApiKeyPrincipal auth,
-        @Valid @RequestBody IntegrationEventRequest request,
+        @RequestBody JsonNode body,
         HttpServletRequest servletRequest
     ) {
         verifyTenant(auth, tenantId);
+        IntegrationParsedEvent parsed = payloadResolver.parseAndValidate(tenantId, body);
         long start = System.currentTimeMillis();
-        String body = attributeBody(servletRequest);
-        String payloadHash = IntegrationEventService.hashPayload(body);
+        String bodyRaw = attributeBody(servletRequest);
+        String payloadHash = IntegrationEventService.hashPayload(bodyRaw);
         String apiKeyUid = auth.keyUid();
 
         try {
-            Object result = integrationEventService.processEvent(tenantId, request, apiKeyUid, body, payloadHash);
+            Object result = integrationEventService.processEvent(tenantId, parsed, apiKeyUid, bodyRaw, payloadHash);
             int processingMs = (int) (System.currentTimeMillis() - start);
             int httpStatus = 200;
 
             auditService.logApiRequest(
                 tenantId, apiKeyUid, requestId(servletRequest), "POST", servletRequest.getRequestURI(),
-                request.getEventId(), request.getCustomerId(), httpStatus, processingMs,
+                parsed.eventId(), parsed.customerId(), httpStatus, processingMs,
                 null, null, payloadHash, clientIp(servletRequest), servletRequest.getHeader("User-Agent")
             );
             metricsService.recordRequest(tenantId, "events/process", httpStatus, processingMs);
@@ -89,16 +94,17 @@ public class IntegrationApiController {
     public ResponseEntity<ValidationResponse> validateEvent(
         @PathVariable String tenantId,
         @AuthenticationPrincipal ApiKeyPrincipal auth,
-        @Valid @RequestBody IntegrationEventRequest request,
+        @RequestBody JsonNode body,
         HttpServletRequest servletRequest
     ) {
         verifyTenant(auth, tenantId);
+        IntegrationParsedEvent parsed = payloadResolver.parseAndValidate(tenantId, body);
         long start = System.currentTimeMillis();
-        ValidationResponse response = integrationEventService.validateEvent(tenantId, request);
+        ValidationResponse response = integrationEventService.validateEvent(tenantId, parsed);
         int processingMs = (int) (System.currentTimeMillis() - start);
         auditService.logApiRequest(
             tenantId, auth.keyUid(), requestId(servletRequest), "POST", servletRequest.getRequestURI(),
-            request.getEventId(), request.getCustomerId(), 200, processingMs,
+            parsed.eventId(), parsed.customerId(), 200, processingMs,
             null, null, IntegrationEventService.hashPayload(attributeBody(servletRequest)),
             clientIp(servletRequest), servletRequest.getHeader("User-Agent")
         );

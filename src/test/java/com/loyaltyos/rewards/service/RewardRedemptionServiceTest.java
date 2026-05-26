@@ -1,5 +1,6 @@
 package com.loyaltyos.rewards.service;
 
+import com.loyaltyos.rewards.catalog.RewardCatalogService;
 import com.loyaltyos.rewards.dto.RedemptionLimits;
 import com.loyaltyos.rewards.dto.RedemptionRequest;
 import com.loyaltyos.rewards.dto.RedemptionResult;
@@ -47,6 +48,9 @@ class RewardRedemptionServiceTest {
     @Mock
     private ProgrammeRedemptionConfigResolver redemptionConfigResolver;
 
+    @Mock
+    private RewardCatalogService rewardCatalogService;
+
     @InjectMocks
     private RewardRedemptionService service;
 
@@ -60,6 +64,15 @@ class RewardRedemptionServiceTest {
         request.setProgrammeUid("default");
         request.setPointsToRedeem(new BigDecimal("50"));
         lenient().when(redemptionConfigResolver.resolve("t1", "default")).thenReturn(RedemptionLimits.none());
+        lenient().when(rewardCatalogService.resolveRedemption(eq("t1"), eq("default"), any(), any()))
+            .thenAnswer(inv -> {
+                String catalogUid = inv.getArgument(2);
+                BigDecimal pts = inv.getArgument(3);
+                if (catalogUid != null && !String.valueOf(catalogUid).isBlank()) {
+                    return new RewardCatalogService.CatalogRedemptionResolution(null, pts, java.util.Map.of());
+                }
+                return new RewardCatalogService.CatalogRedemptionResolution(null, pts, java.util.Map.of());
+            });
     }
 
     private RewardBalanceResponse balance(BigDecimal amount) {

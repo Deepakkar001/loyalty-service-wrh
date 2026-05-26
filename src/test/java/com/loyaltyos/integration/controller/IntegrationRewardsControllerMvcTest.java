@@ -13,6 +13,7 @@ import com.loyaltyos.integration.service.IntegrationAuditService;
 import com.loyaltyos.integration.service.IntegrationBalanceService;
 import com.loyaltyos.integration.service.IntegrationMetricsService;
 import com.loyaltyos.integration.service.IntegrationRedemptionService;
+import com.loyaltyos.integration.service.IntegrationRewardCatalogService;
 import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
 import com.loyaltyos.rewards.exception.RewardInsufficientBalanceException;
 import com.loyaltyos.rewards.exception.RewardRedemptionLimitExceededException;
@@ -87,6 +88,9 @@ class IntegrationRewardsControllerMvcTest {
 
     @MockBean
     private IntegrationMetricsService metricsService;
+
+    @MockBean
+    private IntegrationRewardCatalogService rewardCatalogService;
 
     @BeforeEach
     void stubSideEffects() {

@@ -1,28 +1,23 @@
 package com.loyaltyos.integration.dto;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
-
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 
+/**
+ * Legacy typed request shape. Public integration endpoints accept arbitrary JSON validated
+ * against the tenant programme {@code eventSchema} via {@link com.loyaltyos.integration.service.IntegrationEventPayloadResolver}.
+ */
 public class IntegrationEventRequest {
 
-    @NotBlank
     private String eventType;
 
-    @NotBlank
     private String eventId;
 
     private Instant timestamp;
 
-    @NotBlank
     private String customerId;
 
-    @NotNull
-    @Positive
     private BigDecimal amount;
 
     private String currency;

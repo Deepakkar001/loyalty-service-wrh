@@ -1,18 +1,19 @@
 package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * Validates an incoming event JSON map against the programme's {@code eventSchema}.
  * Supports {@code eventDefinitions} (per eventType core fields) with legacy fallback to {@code standardFields}.
- * <p><b>Persistence of {@code required}.</b> Field definitions live in MySQL {@code programme_config.config_json}
- * under {@code eventSchema}, for example {@code eventDefinitions[].coreFields[]} and {@code customFields[]}, each with
- * {@code name}, {@code type}, and {@code required}. Values are written when tenants save configuration through
- * {@code PUT /api/v2/programmes/{uid}/config} (see {@link com.loyaltyos.onboarding.service.ProgrammeService#saveConfig}).
- * This class only reads the stored booleans: for every field where {@code required} is true, the payload must include
- * that property or validation returns an error map used by sandbox validation and integration flows.</p>
+ * <p>Checks {@code required} flags and {@code type} for each defined field ({@code string}, {@code number},
+ * {@code integer}, {@code boolean}, {@code date-time}, {@code object}). Types are enforced when a value is present;
+ * unknown or blank {@code type} defaults to {@code string}.</p>
  */
 public final class EventSchemaPayloadValidator {
 
@@ -41,11 +42,11 @@ public final class EventSchemaPayloadValidator {
                 errors.put("eventType", "No configured schema for eventType \"" + eventType + "\"");
                 return errors;
             }
-            mergeFieldErrors(errors, requiredFieldErrors(def.path("coreFields"), payload));
-            mergeFieldErrors(errors, requiredFieldErrors(es.path("customFields"), payload));
+            mergeFieldErrors(errors, schemaFieldErrors(def.path("coreFields"), payload));
+            mergeFieldErrors(errors, schemaFieldErrors(es.path("customFields"), payload));
         } else {
-            mergeFieldErrors(errors, requiredFieldErrors(es.path("standardFields"), payload));
-            mergeFieldErrors(errors, requiredFieldErrors(es.path("customFields"), payload));
+            mergeFieldErrors(errors, schemaFieldErrors(es.path("standardFields"), payload));
+            mergeFieldErrors(errors, schemaFieldErrors(es.path("customFields"), payload));
         }
         return errors;
     }
@@ -60,24 +61,115 @@ public final class EventSchemaPayloadValidator {
         return null;
     }
 
-    private static Map<String, String> requiredFieldErrors(JsonNode fieldsArr, Map<String, Object> payload) {
+    private static Map<String, String> schemaFieldErrors(JsonNode fieldsArr, Map<String, Object> payload) {
         Map<String, String> e = new LinkedHashMap<>();
         if (!fieldsArr.isArray()) {
             return e;
         }
         for (JsonNode f : fieldsArr) {
-            if (!f.path("required").asBoolean(false)) {
-                continue;
-            }
             String name = f.path("name").asText("").trim();
             if (name.isEmpty()) {
                 continue;
             }
-            if (!payload.containsKey(name) || payload.get(name) == null) {
+            boolean required = f.path("required").asBoolean(false);
+            String type = normalizeType(f.path("type").asText(""));
+
+            boolean present = payload.containsKey(name);
+            Object value = present ? payload.get(name) : null;
+
+            if (required && (!present || value == null || isBlankValue(value))) {
                 e.putIfAbsent(name, name + " is required for this event schema");
+                continue;
+            }
+            if (!present || value == null) {
+                continue;
+            }
+            if (isBlankValue(value) && required) {
+                e.putIfAbsent(name, name + " is required for this event schema");
+                continue;
+            }
+            if (isBlankValue(value)) {
+                continue;
+            }
+
+            String typeError = typeMismatchMessage(name, type, value);
+            if (typeError != null) {
+                e.putIfAbsent(name, typeError);
             }
         }
         return e;
+    }
+
+    private static String normalizeType(String raw) {
+        if (raw == null) {
+            return "string";
+        }
+        String t = raw.trim().toLowerCase();
+        return switch (t) {
+            case "number", "integer", "boolean", "date-time", "object" -> t;
+            default -> "string";
+        };
+    }
+
+    private static boolean isBlankValue(Object value) {
+        return value instanceof String s && s.isBlank();
+    }
+
+    private static String typeMismatchMessage(String name, String type, Object value) {
+        return switch (type) {
+            case "number" -> matchesNumber(value) ? null : name + " must be a number";
+            case "integer" -> matchesInteger(value) ? null : name + " must be an integer";
+            case "boolean" -> value instanceof Boolean ? null : name + " must be a boolean";
+            case "date-time" -> matchesDateTime(value) ? null : name + " must be a date-time string (ISO-8601)";
+            case "object" -> matchesObject(value) ? null : name + " must be a JSON object";
+            default -> matchesString(value) ? null : name + " must be a string";
+        };
+    }
+
+    private static boolean matchesString(Object value) {
+        return value instanceof String;
+    }
+
+    private static boolean matchesNumber(Object value) {
+        return value instanceof Number;
+    }
+
+    private static boolean matchesInteger(Object value) {
+        return value instanceof Number n && isWholeNumber(n);
+    }
+
+    private static boolean isWholeNumber(Number n) {
+        if (n instanceof Integer || n instanceof Long || n instanceof Short || n instanceof Byte) {
+            return true;
+        }
+        BigDecimal bd = new BigDecimal(n.toString());
+        return bd.stripTrailingZeros().scale() <= 0;
+    }
+
+    private static boolean matchesDateTime(Object value) {
+        if (!(value instanceof String s) || s.isBlank()) {
+            return false;
+        }
+        String trimmed = s.trim();
+        try {
+            Instant.parse(trimmed);
+            return true;
+        } catch (DateTimeParseException ignored) {
+            // try offset datetime
+        }
+        try {
+            java.time.OffsetDateTime.parse(trimmed);
+            return true;
+        } catch (DateTimeParseException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean matchesObject(Object value) {
+        if (value instanceof Map<?, ?>) {
+            return true;
+        }
+        return value != null && !(value instanceof Collection<?>) && !(value.getClass().isArray());
     }
 
     private static void mergeFieldErrors(Map<String, String> dest, Map<String, String> src) {

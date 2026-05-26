@@ -6,7 +6,7 @@ import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse;
 import com.loyaltyos.campaigns.service.CampaignOrchestrationService;
 import com.loyaltyos.integration.dto.EventIdempotentReplayResponse;
 import com.loyaltyos.integration.dto.EventProcessingResponse;
-import com.loyaltyos.integration.dto.IntegrationEventRequest;
+import com.loyaltyos.integration.dto.IntegrationParsedEvent;
 import com.loyaltyos.integration.exception.IntegrationApiException;
 import com.loyaltyos.integration.repository.IntegrationEventProcessingLogRepository;
 import com.loyaltyos.onboarding.service.IntegrationService;
@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -41,27 +42,40 @@ class IntegrationEventServiceTest {
         new ObjectMapper()
     );
 
-    IntegrationEventRequest req = new IntegrationEventRequest();
-    req.setEventId("evt_1");
-    req.setCustomerId("c1");
-    req.setEventType("PURCHASE");
-    req.setAmount(BigDecimal.TEN);
+    IntegrationParsedEvent parsed = sampleParsed("evt_1", "c1", "PURCHASE");
 
-    Object result = svc.processEvent("t1", req, "key1", "{}", "hash");
+    Object result = svc.processEvent("t1", parsed, "key1", "{}", "hash");
     assertInstanceOf(EventIdempotentReplayResponse.class, result);
   }
 
   @Test
-  void processEvent_mapsTimestampAndChannelIntoOrchestrationPayload() {
+  void processEvent_passesFullEventPayloadToOrchestration() {
     CampaignOrchestrationService orchestration = mock(CampaignOrchestrationService.class);
     LoyaltyEventProcessResponse success = new LoyaltyEventProcessResponse();
     success.setSuccess(true);
-  ArgumentCaptor<LoyaltyEventProcessRequest> requestCaptor = ArgumentCaptor.forClass(LoyaltyEventProcessRequest.class);
+    ArgumentCaptor<LoyaltyEventProcessRequest> requestCaptor = ArgumentCaptor.forClass(LoyaltyEventProcessRequest.class);
     when(orchestration.process(eq("t1"), requestCaptor.capture())).thenReturn(success);
 
     IntegrationResponseMapper mapper = mock(IntegrationResponseMapper.class);
     EventProcessingResponse mapped = new EventProcessingResponse();
     when(mapper.toSuccessResponse(any(), eq(success), isNull(), anyInt())).thenReturn(mapped);
+
+    ObjectMapper om = new ObjectMapper();
+    var eventPayload = om.createObjectNode();
+    eventPayload.put("Orderid", 999);
+    eventPayload.put("Channel", "MOBILE_APP");
+
+    IntegrationParsedEvent parsed = new IntegrationParsedEvent(
+        "OrderPlaced",
+        "evt_3",
+        "default",
+        "456",
+        BigDecimal.ZERO,
+        null,
+        Map.of("Orderid", 999),
+        eventPayload,
+        Map.of("channel", "MOBILE_APP")
+    );
 
     IntegrationEventService svc = new IntegrationEventService(
         orchestration,
@@ -69,26 +83,15 @@ class IntegrationEventServiceTest {
         mock(IntegrationIdempotencyService.class),
         mapper,
         mock(IntegrationEventProcessingLogRepository.class),
-        new ObjectMapper()
+        om
     );
 
-    IntegrationEventRequest req = new IntegrationEventRequest();
-    req.setEventId("evt_3");
-    req.setCustomerId("c1");
-    req.setEventType("PURCHASE");
-    req.setAmount(BigDecimal.valueOf(500));
-    req.setTimestamp(Instant.parse("2026-05-24T14:30:00Z"));
-    req.setChannel("MOBILE_APP");
-    req.setCurrency("INR");
-
-    svc.processEvent("t1", req, "key1", "{}", "hash");
+    svc.processEvent("t1", parsed, "key1", "{}", "hash");
 
     LoyaltyEventProcessRequest core = requestCaptor.getValue();
-    assertNotNull(core.getMetadata());
-    assertEquals("2026-05-24T14:30:00Z", core.getMetadata().get("timestamp"));
+    assertEquals("456", core.getCustomerId());
+    assertTrue(core.getEventPayload().has("Orderid"));
     assertEquals("MOBILE_APP", core.getMetadata().get("channel"));
-    assertNotNull(core.getEventPayload());
-    assertTrue(core.getEventPayload().has("timestamp"));
   }
 
   @Test
@@ -112,13 +115,21 @@ class IntegrationEventServiceTest {
         new ObjectMapper()
     );
 
-    IntegrationEventRequest req = new IntegrationEventRequest();
-    req.setEventId("evt_2");
-    req.setCustomerId("c1");
-    req.setEventType("PURCHASE");
-    req.setAmount(BigDecimal.TEN);
-
     assertThrows(IntegrationApiException.class,
-        () -> svc.processEvent("t1", req, "key1", "{}", "hash"));
+        () -> svc.processEvent("t1", sampleParsed("evt_2", "c1", "PURCHASE"), "key1", "{}", "hash"));
+  }
+
+  private static IntegrationParsedEvent sampleParsed(String eventId, String customerId, String eventType) {
+    return new IntegrationParsedEvent(
+        eventType,
+        eventId,
+        "default",
+        customerId,
+        BigDecimal.TEN,
+        null,
+        Map.of("customerId", customerId, "eventType", eventType, "eventId", eventId, "amount", BigDecimal.TEN),
+        new ObjectMapper().createObjectNode(),
+        Map.of()
+    );
   }
 }

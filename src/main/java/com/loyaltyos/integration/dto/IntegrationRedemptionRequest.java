@@ -1,8 +1,6 @@
 package com.loyaltyos.integration.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -19,9 +17,11 @@ public class IntegrationRedemptionRequest {
 
     private String programmeUid = "default";
 
-    @NotNull
-    @Positive
+    /** Omit when {@link #catalogRewardUid} is set (points resolved from catalog). */
     private BigDecimal pointsToRedeem;
+
+    @Size(max = 64)
+    private String catalogRewardUid;
 
     private BigDecimal orderAmount;
     private String currency;
@@ -35,6 +35,8 @@ public class IntegrationRedemptionRequest {
     public void setProgrammeUid(String programmeUid) { this.programmeUid = programmeUid; }
     public BigDecimal getPointsToRedeem() { return pointsToRedeem; }
     public void setPointsToRedeem(BigDecimal pointsToRedeem) { this.pointsToRedeem = pointsToRedeem; }
+    public String getCatalogRewardUid() { return catalogRewardUid; }
+    public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
     public BigDecimal getOrderAmount() { return orderAmount; }
     public void setOrderAmount(BigDecimal orderAmount) { this.orderAmount = orderAmount; }
     public String getCurrency() { return currency; }

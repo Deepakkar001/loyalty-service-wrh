@@ -1,5 +1,7 @@
 package com.loyaltyos.rewards.service;
 
+import com.loyaltyos.rewards.catalog.RewardCatalogItem;
+import com.loyaltyos.rewards.catalog.RewardCatalogService;
 import com.loyaltyos.rewards.dto.RedemptionLimits;
 import com.loyaltyos.rewards.dto.RedemptionRequest;
 import com.loyaltyos.rewards.dto.RedemptionResult;
@@ -31,12 +33,14 @@ public class RewardRedemptionService {
     private final PointsLedgerRepository pointsLedgerRepository;
     private final CustomerBalanceCacheSyncService customerBalanceCacheSyncService;
     private final ProgrammeRedemptionConfigResolver redemptionConfigResolver;
+    private final RewardCatalogService rewardCatalogService;
 
     public RewardRedemptionService(
         RewardIssuanceService rewardIssuanceService,
         PointsLedgerRepository pointsLedgerRepository,
         CustomerBalanceCacheSyncService customerBalanceCacheSyncService,
-        ProgrammeRedemptionConfigResolver redemptionConfigResolver
+        ProgrammeRedemptionConfigResolver redemptionConfigResolver,
+        RewardCatalogService rewardCatalogService
     ) {
         this.rewardIssuanceService = Objects.requireNonNull(rewardIssuanceService, "rewardIssuanceService");
         this.pointsLedgerRepository = Objects.requireNonNull(pointsLedgerRepository, "pointsLedgerRepository");
@@ -45,6 +49,7 @@ public class RewardRedemptionService {
             "customerBalanceCacheSyncService"
         );
         this.redemptionConfigResolver = Objects.requireNonNull(redemptionConfigResolver, "redemptionConfigResolver");
+        this.rewardCatalogService = Objects.requireNonNull(rewardCatalogService, "rewardCatalogService");
     }
 
     @Transactional(readOnly = true)
@@ -53,9 +58,11 @@ public class RewardRedemptionService {
         Objects.requireNonNull(request, "request");
         String programmeUid = normalizeProgramme(request.getProgrammeUid());
         String customerId = request.getCustomerId().trim();
-        BigDecimal points = normalizePoints(request.getPointsToRedeem());
+        ResolvedRedemption resolved = resolvePointsAndCatalog(tenantId, programmeUid, request);
+        BigDecimal points = resolved.points();
 
-        Map<String, String> errors = validateBusinessRules(tenantId, programmeUid, customerId, points, request.getOrderAmount());
+        Map<String, String> errors = new LinkedHashMap<>(resolved.errors());
+        errors.putAll(validateBusinessRules(tenantId, programmeUid, customerId, points, request.getOrderAmount()));
         RewardBalanceResponse balance = rewardIssuanceService.getBalance(tenantId, programmeUid, customerId);
         BigDecimal available = balance.getBalance() == null ? BigDecimal.ZERO : balance.getBalance();
 
@@ -69,6 +76,8 @@ public class RewardRedemptionService {
         if (points.compareTo(available) > 0) {
             errors.put("pointsToRedeem", "Insufficient balance: available " + available.toPlainString());
         }
+
+        applyCatalogToValidation(result, resolved.catalogItem());
 
         if (errors.isEmpty()) {
             result.setStatus("VALIDATION_SUCCESS");
@@ -89,7 +98,8 @@ public class RewardRedemptionService {
         String programmeUid = normalizeProgramme(request.getProgrammeUid());
         String customerId = request.getCustomerId().trim();
         String redemptionId = request.getRedemptionId().trim();
-        BigDecimal points = normalizePoints(request.getPointsToRedeem());
+        ResolvedRedemption resolved = resolvePointsAndCatalog(tenantId, programmeUid, request);
+        BigDecimal points = resolved.points();
         String idempotencyKey = toIdempotencyKey(redemptionId);
 
         Optional<PointsLedger> existing = pointsLedgerRepository.findFirstByTenantIdAndCustomerIdAndIdempotencyKey(
@@ -99,7 +109,8 @@ public class RewardRedemptionService {
             return buildReplayResult(tenantId, programmeUid, customerId, redemptionId, existing.get());
         }
 
-        Map<String, String> errors = validateBusinessRules(tenantId, programmeUid, customerId, points, request.getOrderAmount());
+        Map<String, String> errors = new LinkedHashMap<>(resolved.errors());
+        errors.putAll(validateBusinessRules(tenantId, programmeUid, customerId, points, request.getOrderAmount()));
         RewardBalanceResponse balance = rewardIssuanceService.getBalance(tenantId, programmeUid, customerId);
         BigDecimal available = balance.getBalance() == null ? BigDecimal.ZERO : balance.getBalance();
         if (points.compareTo(available) > 0) {
@@ -115,6 +126,7 @@ public class RewardRedemptionService {
             throw new RewardRedemptionValidationException("Redemption validation failed", errors);
         }
 
+        String description = buildRedemptionDescription(redemptionId, resolved.catalogItem());
         PointsLedger debit = PointsLedger.builder()
             .tenantId(tenantId)
             .customerId(customerId)
@@ -123,7 +135,7 @@ public class RewardRedemptionService {
             .entryType(LedgerEntryType.DEBIT)
             .points(points)
             .sourceEventId(redemptionId)
-            .description("REDEMPTION " + redemptionId)
+            .description(description)
             .createdBy("INTEGRATION_API")
             .build();
 
@@ -141,6 +153,7 @@ public class RewardRedemptionService {
         result.setIdempotentReplay(false);
         result.setTimestamp(Instant.now());
         result.setNewBalance(rewardIssuanceService.getBalance(tenantId, programmeUid, customerId).getBalance());
+        applyCatalogToResult(result, resolved.catalogItem());
         return result;
     }
 
@@ -226,10 +239,59 @@ public class RewardRedemptionService {
         return programmeUid == null || programmeUid.isBlank() ? "default" : programmeUid;
     }
 
-    private static BigDecimal normalizePoints(BigDecimal points) {
-        if (points == null) {
-            throw new RewardRedemptionValidationException("pointsToRedeem is required");
+    private ResolvedRedemption resolvePointsAndCatalog(String tenantId, String programmeUid, RedemptionRequest request) {
+        RewardCatalogService.CatalogRedemptionResolution resolution = rewardCatalogService.resolveRedemption(
+            tenantId,
+            programmeUid,
+            request.getCatalogRewardUid(),
+            request.getPointsToRedeem()
+        );
+        if (!resolution.isValid()) {
+            return new ResolvedRedemption(null, BigDecimal.ZERO, resolution.catalogItem(), resolution.errors());
         }
-        return points.setScale(MAX_POINTS_SCALE, RoundingMode.HALF_UP);
+        BigDecimal points = resolution.resolvedPoints();
+        if (points == null || points.signum() <= 0) {
+            Map<String, String> errors = new LinkedHashMap<>(resolution.errors());
+            errors.putIfAbsent("pointsToRedeem", "pointsToRedeem is required when catalogRewardUid is omitted");
+            return new ResolvedRedemption(points, BigDecimal.ZERO, resolution.catalogItem(), errors);
+        }
+        return new ResolvedRedemption(
+            points.setScale(MAX_POINTS_SCALE, RoundingMode.HALF_UP),
+            points,
+            resolution.catalogItem(),
+            resolution.errors()
+        );
     }
+
+    private static String buildRedemptionDescription(String redemptionId, RewardCatalogItem catalogItem) {
+        if (catalogItem == null) {
+            return "REDEMPTION " + redemptionId;
+        }
+        return "REDEMPTION " + redemptionId + " catalog=" + catalogItem.rewardUid() + " type=" + catalogItem.rewardType();
+    }
+
+    private static void applyCatalogToValidation(RedemptionValidationResult result, RewardCatalogItem item) {
+        if (item == null) {
+            return;
+        }
+        result.setCatalogRewardUid(item.rewardUid());
+        result.setCatalogRewardName(item.name());
+        result.setCatalogRewardType(item.rewardType());
+    }
+
+    private static void applyCatalogToResult(RedemptionResult result, RewardCatalogItem item) {
+        if (item == null) {
+            return;
+        }
+        result.setCatalogRewardUid(item.rewardUid());
+        result.setCatalogRewardName(item.name());
+        result.setCatalogRewardType(item.rewardType());
+    }
+
+    private record ResolvedRedemption(
+        BigDecimal points,
+        BigDecimal rawPoints,
+        RewardCatalogItem catalogItem,
+        Map<String, String> errors
+    ) {}
 }

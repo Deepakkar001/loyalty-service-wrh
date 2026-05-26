@@ -1,7 +1,7 @@
 package com.loyaltyos.integration;
 
 import com.loyaltyos.integration.dto.EventProcessingResponse;
-import com.loyaltyos.integration.dto.IntegrationEventRequest;
+import com.loyaltyos.integration.dto.IntegrationParsedEvent;
 import com.loyaltyos.integration.service.IntegrationEventService;
 import com.loyaltyos.integration.service.IntegrationIdempotencyService;
 import com.loyaltyos.integration.service.IntegrationResponseMapper;
@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,13 +48,19 @@ class IntegrationApiE2ETest {
         new ObjectMapper()
     );
 
-    IntegrationEventRequest req = new IntegrationEventRequest();
-    req.setEventId("evt_e2e_1");
-    req.setCustomerId("cust_1");
-    req.setEventType("PURCHASE");
-    req.setAmount(BigDecimal.valueOf(500));
+    IntegrationParsedEvent parsed = new IntegrationParsedEvent(
+        "PURCHASE",
+        "evt_e2e_1",
+        "default",
+        "cust_1",
+        BigDecimal.valueOf(500),
+        null,
+        Map.of("customerId", "cust_1", "amount", 500, "eventType", "PURCHASE"),
+        new ObjectMapper().createObjectNode(),
+        Map.of()
+    );
 
-    Object first = svc.processEvent("tenant_e2e", req, "key_uid", "{}", "hash1");
+    Object first = svc.processEvent("tenant_e2e", parsed, "key_uid", "{}", "hash1");
     assertInstanceOf(EventProcessingResponse.class, first);
     EventProcessingResponse success = (EventProcessingResponse) first;
     assertEquals("SUCCESS", success.getStatus());

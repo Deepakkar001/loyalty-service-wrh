@@ -216,6 +216,46 @@
         "productionEndpointUrl": { "type": "string" },
         "subscribedEvents": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "rewardCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "rewardTypes": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["typeCode", "label"],
+            "properties": {
+              "typeCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "description": { "type": "string", "maxLength": 512 }
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rewardUid", "name", "rewardType", "status", "pointsCost"],
+            "properties": {
+              "rewardUid": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+              "rewardType": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "status": { "type": "string", "enum": ["DRAFT", "ACTIVE", "ARCHIVED"] },
+              "pointsCost": { "type": "number", "exclusiveMinimum": 0 },
+              "displayOrder": { "type": "integer", "minimum": 0 },
+              "description": { "type": "string", "maxLength": 1024 },
+              "metadata": { "type": "object" }
+            }
+          }
+        }
+      }
     }
   }
 }

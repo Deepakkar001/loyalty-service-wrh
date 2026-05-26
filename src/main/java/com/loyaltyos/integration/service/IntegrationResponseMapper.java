@@ -3,7 +3,7 @@ package com.loyaltyos.integration.service;
 import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse;
 import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse.AppliedCampaignLine;
 import com.loyaltyos.integration.dto.EventProcessingResponse;
-import com.loyaltyos.integration.dto.IntegrationEventRequest;
+import com.loyaltyos.integration.dto.IntegrationParsedEvent;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
 import org.springframework.stereotype.Component;
 
@@ -16,22 +16,22 @@ import java.util.List;
 public class IntegrationResponseMapper {
 
     public EventProcessingResponse toSuccessResponse(
-        IntegrationEventRequest request,
+        IntegrationParsedEvent request,
         LoyaltyEventProcessResponse core,
         RuleEvaluationResponse ruleEval,
         int processingTimeMs
     ) {
         EventProcessingResponse response = new EventProcessingResponse();
         response.setStatus("SUCCESS");
-        response.setEventId(request.getEventId());
-        response.setTimestamp(request.getTimestamp() != null ? request.getTimestamp() : Instant.now());
-        response.setIdempotencyKey(request.getEventId());
+        response.setEventId(request.eventId());
+        response.setTimestamp(resolveTimestamp(request));
+        response.setIdempotencyKey(request.eventId());
         response.setProcessingTimeMs(processingTimeMs);
 
         EventProcessingResponse.CustomerInfo customer = new EventProcessingResponse.CustomerInfo();
-        customer.setCustomerId(request.getCustomerId());
-        customer.setTierBefore(request.getCustomerTierUid());
-        customer.setTierAfter(request.getCustomerTierUid());
+        customer.setCustomerId(request.customerId());
+        customer.setTierBefore(request.customerTierUid());
+        customer.setTierAfter(request.customerTierUid());
         customer.setTierChanged(false);
         response.setCustomer(customer);
 
@@ -108,5 +108,17 @@ public class IntegrationResponseMapper {
             lines.add(line);
         }
         return lines;
+    }
+
+    private static Instant resolveTimestamp(IntegrationParsedEvent request) {
+        Object ts = request.metadata().get("timestamp");
+        if (ts == null) {
+            return Instant.now();
+        }
+        try {
+            return Instant.parse(String.valueOf(ts));
+        } catch (Exception e) {
+            return Instant.now();
+        }
     }
 }

@@ -9,41 +9,29 @@ import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.entity.SandboxTestEvent;
 import com.loyaltyos.onboarding.entity.TenantApiKey;
 import com.loyaltyos.onboarding.entity.TenantOnboarding;
-import com.loyaltyos.onboarding.entity.WebhookSubscription;
 import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
 import com.loyaltyos.onboarding.enums.ApiKeyStatus;
 import com.loyaltyos.onboarding.enums.OnboardingStatus;
-import com.loyaltyos.onboarding.enums.WebhookVerificationStatus;
 import com.loyaltyos.onboarding.dto.SandboxValidateEventRequest;
 import com.loyaltyos.rules.dto.RuleEvaluateRequest;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
 import com.loyaltyos.rules.service.RuleEvaluationService;
 import com.loyaltyos.onboarding.dto.ApiKeyGeneratedResponse;
 import com.loyaltyos.onboarding.dto.ApiKeySummaryResponse;
-import com.loyaltyos.onboarding.dto.WebhookStatusResponse;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.SandboxTestEventRepository;
 import com.loyaltyos.onboarding.repository.TenantApiKeyRepository;
 import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
-import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
+import com.loyaltyos.integration.service.IntegrationEventPayloadResolver;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
-import com.loyaltyos.onboarding.logging.HttpOutRestTemplateInterceptor;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -51,7 +39,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -76,15 +63,14 @@ public class IntegrationService {
     private final TenantOnboardingRepository tenantOnboardingRepository;
     private final TenantApiKeyRepository tenantApiKeyRepository;
     private final TenantConfigRepository tenantConfigRepository;
-    private final WebhookSubscriptionRepository webhookSubscriptionRepository;
     private final OnboardingAuditLogRepository auditLogRepository;
     private final OnboardingStateMachine stateMachine;
     private final ObjectMapper objectMapper;
-    private final RestTemplateBuilder restTemplateBuilder;
     private final RuleEvaluationService ruleEvaluationService;
     private final SandboxTestEventRepository sandboxTestEventRepository;
     private final ProgrammeService programmeService;
     private final IntegrationCredentialCryptoService credentialCryptoService;
+    private final IntegrationEventPayloadResolver integrationEventPayloadResolver;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -92,28 +78,27 @@ public class IntegrationService {
         TenantOnboardingRepository tenantOnboardingRepository,
         TenantApiKeyRepository tenantApiKeyRepository,
         TenantConfigRepository tenantConfigRepository,
-        WebhookSubscriptionRepository webhookSubscriptionRepository,
         OnboardingAuditLogRepository auditLogRepository,
         OnboardingStateMachine stateMachine,
         ObjectMapper objectMapper,
-        RestTemplateBuilder restTemplateBuilder,
         RuleEvaluationService ruleEvaluationService,
         SandboxTestEventRepository sandboxTestEventRepository,
         ProgrammeService programmeService,
-        IntegrationCredentialCryptoService credentialCryptoService
+        IntegrationCredentialCryptoService credentialCryptoService,
+        IntegrationEventPayloadResolver integrationEventPayloadResolver
     ) {
         this.tenantOnboardingRepository = Objects.requireNonNull(tenantOnboardingRepository, "tenantOnboardingRepository");
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
         this.tenantConfigRepository = Objects.requireNonNull(tenantConfigRepository, "tenantConfigRepository");
-        this.webhookSubscriptionRepository = Objects.requireNonNull(webhookSubscriptionRepository, "webhookSubscriptionRepository");
         this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
         this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.restTemplateBuilder = Objects.requireNonNull(restTemplateBuilder, "restTemplateBuilder");
         this.ruleEvaluationService = Objects.requireNonNull(ruleEvaluationService, "ruleEvaluationService");
         this.sandboxTestEventRepository = Objects.requireNonNull(sandboxTestEventRepository, "sandboxTestEventRepository");
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
         this.credentialCryptoService = Objects.requireNonNull(credentialCryptoService, "credentialCryptoService");
+        this.integrationEventPayloadResolver = Objects.requireNonNull(
+            integrationEventPayloadResolver, "integrationEventPayloadResolver");
     }
 
     public ApiKeyGeneratedResponse generateSandboxKeysLegacy(String tenantId) {
@@ -208,89 +193,6 @@ public class IntegrationService {
             .toList();
     }
 
-    @Transactional
-    public WebhookStatusResponse verifyWebhook(String tenantId) {
-        // Load subscription (normalized tables)
-        WebhookSubscription sub = webhookSubscriptionRepository
-            .findFirstByTenantIdAndActiveTrueOrderByCreatedAtDesc(tenantId)
-            .orElseThrow(() -> new IllegalStateException("Webhook subscription not configured"));
-
-        // Find an ACTIVE SANDBOX key to use its signing secret hash for HMAC signing.
-        List<TenantApiKey> keys = tenantApiKeyRepository.findByTenantIdAndEnvironmentAndStatus(
-            tenantId, ApiKeyEnvironment.SANDBOX, ApiKeyStatus.ACTIVE);
-        if (keys.isEmpty()) {
-            throw new IllegalStateException("Generate sandbox API keys before verifying webhook.");
-        }
-
-        // We do NOT store plaintext secrets, so we cannot actually HMAC-sign with plaintext here.
-        // For now (MVP): send an unsigned verification ping and mark status FAILED if not 200.
-        // This keeps normalized status behavior without claiming full production signing.
-        // In production, secret should be stored in Vault and retrieved by reference.
-        String challenge = randomHex(16);
-        Map<String, Object> payload = Map.of(
-            "event", "WEBHOOK_VERIFICATION",
-            "tenantId", tenantId,
-            "timestamp", Instant.now().toString(),
-            "challenge", challenge
-        );
-
-        RestTemplate rt = restTemplateBuilder
-            .setConnectTimeout(Duration.ofSeconds(5))
-            .setReadTimeout(Duration.ofSeconds(10))
-            .additionalInterceptors(new HttpOutRestTemplateInterceptor())
-            .build();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        try {
-            ResponseEntity<String> res = rt.exchange(
-                sub.getEndpointUrl(),
-                HttpMethod.POST,
-                new HttpEntity<>(payload, headers),
-                String.class
-            );
-
-            if (res.getStatusCode().is2xxSuccessful()) {
-                sub.setVerificationStatus(WebhookVerificationStatus.VERIFIED);
-                sub.setLastVerifiedAt(Instant.now());
-                webhookSubscriptionRepository.save(sub);
-            } else {
-                sub.setVerificationStatus(WebhookVerificationStatus.FAILED);
-                webhookSubscriptionRepository.save(sub);
-            }
-        } catch (RestClientException e) {
-            log.info("Webhook verification failed for tenantId={}, url={}, err={}", tenantId, sub.getEndpointUrl(), e.getMessage());
-            sub.setVerificationStatus(WebhookVerificationStatus.FAILED);
-            webhookSubscriptionRepository.save(sub);
-        }
-
-        return WebhookStatusResponse.builder()
-            .endpointUrl(sub.getEndpointUrl())
-            .verificationStatus(sub.getVerificationStatus())
-            .lastVerifiedAt(sub.getLastVerifiedAt())
-            .build();
-    }
-
-    @Transactional(readOnly = true)
-    public WebhookStatusResponse getWebhookStatus(String tenantId) {
-        WebhookSubscription sub = webhookSubscriptionRepository
-            .findFirstByTenantIdOrderByCreatedAtDesc(tenantId)
-            .orElse(null);
-        if (sub == null) {
-            return WebhookStatusResponse.builder()
-                .endpointUrl(null)
-                .verificationStatus(null)
-                .lastVerifiedAt(null)
-                .build();
-        }
-        return WebhookStatusResponse.builder()
-            .endpointUrl(sub.getEndpointUrl())
-            .verificationStatus(sub.getVerificationStatus())
-            .lastVerifiedAt(sub.getLastVerifiedAt())
-            .build();
-    }
-
     @Transactional(noRollbackFor = com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException.class)
     public Map<String, Object> validateSandboxEvent(String tenantId, SandboxValidateEventRequest request) {
         tenantConfigRepository.findByTenantId(tenantId)
@@ -341,29 +243,16 @@ public class IntegrationService {
         result.put("schemaPresent", programmeSchemaPresent);
 
         try {
-            Object cid = payload.get("customerId");
-            Object amount = payload.get("amount");
-            Object eventType = payload.get("eventType");
-            Object txnId = payload.get("transactionId");
-            if (cid != null && amount != null && eventType != null && txnId != null) {
-                RuleEvaluateRequest ruleReq = RuleEvaluateRequest.builder()
-                    .programmeUid(programmeUid)
-                    .customerId(String.valueOf(cid))
-                    .customerTierUid(payload.get("tierUid") == null ? null : String.valueOf(payload.get("tierUid")))
-                    .eventId(String.valueOf(txnId))
-                    .eventType(String.valueOf(eventType))
-                    .amount(new BigDecimal(String.valueOf(amount)))
-                    .eventPayload(objectMapper.valueToTree(payload))
-                    .channel(payload.get("channel") == null ? null : String.valueOf(payload.get("channel")))
-                    .merchantId(payload.get("merchantId") == null ? null : String.valueOf(payload.get("merchantId")))
-                    .build();
-                RuleEvaluationResponse ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
-                    ? ruleEvaluationService.evaluateSingleRule(tenantId, request.getRuleUid(), ruleReq)
-                    : ruleEvaluationService.evaluate(tenantId, ruleReq);
-                result.put("ruleEvaluation", objectMapper.convertValue(ruleRes, new TypeReference<Map<String, Object>>() {}));
-            }
+            RuleEvaluateRequest ruleReq = integrationEventPayloadResolver.buildRuleEvaluateRequest(payload);
+            RuleEvaluationResponse ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
+                ? ruleEvaluationService.evaluateSingleRule(tenantId, request.getRuleUid(), ruleReq)
+                : ruleEvaluationService.evaluate(tenantId, ruleReq);
+            result.put("ruleEvaluation", objectMapper.convertValue(ruleRes, new TypeReference<Map<String, Object>>() {}));
+        } catch (IllegalArgumentException e) {
+            log.debug("Sandbox rule evaluation skipped: {}", e.getMessage());
+            result.put("ruleEvaluationError", e.getMessage());
         } catch (Exception e) {
-            log.debug("Sandbox rule evaluation skipped or failed: {}", e.getMessage());
+            log.debug("Sandbox rule evaluation failed: {}", e.getMessage());
             result.put("ruleEvaluationError", e.getMessage());
         }
 
