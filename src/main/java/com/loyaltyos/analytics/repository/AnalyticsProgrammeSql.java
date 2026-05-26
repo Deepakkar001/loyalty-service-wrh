@@ -1,17 +1,55 @@
 package com.loyaltyos.analytics.repository;
 
 /**
- * Legacy tier rows may have {@code programme_uid IS NULL} while belonging to the {@code default} programme.
+ * Legacy rows may have {@code programme_uid IS NULL} (treated as {@code default}).
+ * Comparisons collate every string operand to {@code utf8mb4_unicode_ci} so mixed table
+ * defaults (0900 vs unicode) do not fail. Bind parameters use {@code CAST(...)} — never
+ * {@code CONVERT(...)} (MySQL JDBC treats it as an escape and throws {@code Conversion = 'Y'}).
  */
 final class AnalyticsProgrammeSql {
 
+    private static final String COLLATE = "utf8mb4_unicode_ci";
+
     private AnalyticsProgrammeSql() {}
 
+    private static String collate(String expression) {
+        return expression + " COLLATE " + COLLATE;
+    }
+
+    private static String defaultProgrammeLiteral() {
+        return "CAST('default' AS CHAR(64) CHARACTER SET utf8mb4) COLLATE " + COLLATE;
+    }
+
+    private static String programmeUidBind() {
+        return "CAST(:programmeUid AS CHAR(64) CHARACTER SET utf8mb4) COLLATE " + COLLATE;
+    }
+
+    /** COALESCE branch with explicit collation so COALESCE does not inherit 0900 from the column. */
+    private static String coalescedProgrammeColumn(String tableAlias) {
+        return "COALESCE(" + collate(tableAlias + ".programme_uid") + ", " + defaultProgrammeLiteral() + ")";
+    }
+
+    static String tenantColumnEquals(String leftQualified, String rightQualified) {
+        return collate(leftQualified) + " = " + collate(rightQualified);
+    }
+
     static String programmeScope(String tableAlias) {
-        return "COALESCE(" + tableAlias + ".programme_uid, 'default') = :programmeUid";
+        return collate("COALESCE(" + collate(tableAlias + ".programme_uid") + ", " + defaultProgrammeLiteral() + ")")
+            + " = "
+            + programmeUidBind();
     }
 
     static String programmeJoin(String leftAlias, String rightAlias) {
-        return leftAlias + ".programme_uid = COALESCE(" + rightAlias + ".programme_uid, 'default')";
+        return coalescedProgrammeColumn(leftAlias) + " = " + coalescedProgrammeColumn(rightAlias);
+    }
+
+    static String programmeColumnEqualsParam(String qualifiedColumn) {
+        return collate("COALESCE(" + collate(qualifiedColumn) + ", " + defaultProgrammeLiteral() + ")")
+            + " = "
+            + programmeUidBind();
+    }
+
+    static String programmeColumnEqualsColumn(String leftQualified, String rightQualified) {
+        return collate(leftQualified) + " = " + collate(rightQualified);
     }
 }
