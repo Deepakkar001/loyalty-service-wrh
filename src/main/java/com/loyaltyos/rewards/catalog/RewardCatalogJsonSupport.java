@@ -3,6 +3,7 @@ package com.loyaltyos.rewards.catalog;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,8 @@ public final class RewardCatalogJsonSupport {
         int version = catalog.path("version").asInt(1);
         List<RewardCatalogTypeDefinition> types = parseTypes(catalog.path("rewardTypes"));
         List<RewardCatalogItem> items = parseItems(catalog.path("items"), types);
-        return new RewardCatalogSnapshot(version, types, items);
+        items.sort(Comparator.comparingInt(RewardCatalogItem::displayOrder));
+        return new RewardCatalogSnapshot(version, types, List.copyOf(items));
     }
 
     private static List<RewardCatalogTypeDefinition> parseTypes(JsonNode typesArr) {
