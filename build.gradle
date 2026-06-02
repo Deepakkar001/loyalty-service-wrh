@@ -61,6 +61,9 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
+    // CSV import (voucher inventory batches)
+    implementation 'org.apache.commons:commons-csv:1.11.0'
+
     // MapStruct (DTO mapping)
     implementation 'org.mapstruct:mapstruct:1.6.0'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.0'

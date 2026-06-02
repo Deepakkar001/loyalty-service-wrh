@@ -51,6 +51,9 @@ public class CampaignProgrammeValidator {
         if (!programmeRepository.existsByTenantIdAndProgrammeUid(tenantId, programmeUid)) {
             throw new CampaignBadRequestException("Programme not found: " + programmeUid);
         }
+        if (programmeService.isProgrammeArchived(tenantId, programmeUid)) {
+            throw new CampaignBadRequestException("Programme is archived: " + programmeUid);
+        }
     }
 
   /** Tenant-defined event types (comma-separated) — not validated against programme event schema. */

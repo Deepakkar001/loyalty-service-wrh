@@ -2,30 +2,46 @@ package com.loyaltyos.onboarding.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.entity.Programme;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 // import com.loyaltyos.onboarding.event.ProgrammeConfigUpdatedEvent; // with Kafka publish
 import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.onboarding.exception.ProgrammeArchiveBlockedException;
+import com.loyaltyos.onboarding.exception.ProgrammeInactiveException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
+import com.loyaltyos.onboarding.entity.Programme.ProgrammeStatus;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeConfigRepository;
 import com.loyaltyos.onboarding.repository.ProgrammeRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
+import com.loyaltyos.campaigns.entity.Campaign;
+import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.repository.CampaignRepository;
+import com.loyaltyos.rules.entity.EarnRule;
+import com.loyaltyos.rules.enums.RuleStatus;
+import com.loyaltyos.rules.enums.RuleType;
+import com.loyaltyos.rules.repository.EarnRuleRepository;
 // import org.springframework.kafka.core.KafkaTemplate; // re-enable with Kafka
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProgrammeService {
+
+    private static final String DEFAULT_PROGRAMME_UID = "default";
 
     private final ProgrammeRepository programmeRepository;
     private final ProgrammeConfigRepository programmeConfigRepository;
@@ -36,6 +52,8 @@ public class ProgrammeService {
     private final ObjectMapper objectMapper;
     private final RuleCacheService ruleCacheService;
     private final OnboardingStateMachine stateMachine;
+    private final EarnRuleRepository earnRuleRepository;
+    private final CampaignRepository campaignRepository;
 
     public ProgrammeService(
         ProgrammeRepository programmeRepository,
@@ -45,7 +63,9 @@ public class ProgrammeService {
         OnboardingAuditLogRepository auditLogRepository,
         ObjectMapper objectMapper,
         RuleCacheService ruleCacheService,
-        OnboardingStateMachine stateMachine
+        OnboardingStateMachine stateMachine,
+        EarnRuleRepository earnRuleRepository,
+        CampaignRepository campaignRepository
     ) {
         this.programmeRepository = Objects.requireNonNull(programmeRepository, "programmeRepository");
         this.programmeConfigRepository = Objects.requireNonNull(programmeConfigRepository, "programmeConfigRepository");
@@ -55,11 +75,33 @@ public class ProgrammeService {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.ruleCacheService = Objects.requireNonNull(ruleCacheService, "ruleCacheService");
         this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
+        this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
+        this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
     }
 
     @Transactional(readOnly = true)
     public List<Programme> listProgrammes(String tenantId) {
-        return programmeRepository.findByTenantIdOrderByCreatedAtAsc(tenantId);
+        return programmeRepository.findByTenantIdAndStatusNotOrderByCreatedAtAsc(
+            tenantId, Programme.ProgrammeStatus.ARCHIVED
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isProgrammeArchived(String tenantId, String programmeUid) {
+        if (programmeUid == null || programmeUid.isBlank()) {
+            return false;
+        }
+        return programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid.trim())
+            .map(p -> p.getStatus() == Programme.ProgrammeStatus.ARCHIVED)
+            .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<String> archivedProgrammeUids(String tenantId) {
+        return programmeRepository.findByTenantIdOrderByCreatedAtAsc(tenantId).stream()
+            .filter(p -> p.getStatus() == Programme.ProgrammeStatus.ARCHIVED)
+            .map(Programme::getProgrammeUid)
+            .collect(Collectors.toSet());
     }
 
     @Transactional
@@ -89,6 +131,63 @@ public class ProgrammeService {
         return saved;
     }
 
+    /**
+     * Renames a programme for portal lists and keeps {@code programmeIdentity.programmeName} in sync
+     * when an active configuration exists (new versioned config row).
+     */
+    @Transactional
+    public Programme renameProgramme(String tenantId, String programmeUid, String name, String actorId, String actorRole) {
+        String trimmed = name == null ? "" : name.trim();
+        if (trimmed.length() < 2) {
+            throw new IllegalArgumentException("Programme name must be at least 2 characters");
+        }
+
+        Programme programme = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
+            .orElseThrow(() -> new IllegalArgumentException("Programme not found"));
+
+        assertProgrammeEditable(programme);
+
+        programme.setName(trimmed);
+        programme.setUpdatedAt(Instant.now());
+
+        ProgrammeConfig active = getActiveConfigOrNull(tenantId, programmeUid);
+        if (active != null && active.getConfigJson() != null && !active.getConfigJson().isBlank()) {
+            try {
+                JsonNode config = objectMapper.readTree(active.getConfigJson());
+                if (config.isObject()) {
+                    ObjectNode root = (ObjectNode) config;
+                    ObjectNode identity;
+                    JsonNode identityNode = root.get("programmeIdentity");
+                    if (identityNode != null && identityNode.isObject()) {
+                        identity = (ObjectNode) identityNode;
+                    } else {
+                        identity = objectMapper.createObjectNode();
+                        root.set("programmeIdentity", identity);
+                    }
+                    identity.put("programmeName", trimmed);
+                    saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+                    return programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
+                        .orElse(programme);
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to update programme name in configuration", e);
+            }
+        }
+
+        Programme saved = programmeRepository.save(programme);
+
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
+            .tenantId(tenantId)
+            .action("PROGRAMME_RENAMED")
+            .actorId(actorId)
+            .actorRole(actorRole)
+            .afterState(Map.of("programmeUid", programmeUid, "name", trimmed))
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
+
+        return saved;
+    }
+
     @Transactional(readOnly = true)
     public ProgrammeConfig getActiveConfigOrNull(String tenantId, String programmeUid) {
         return programmeConfigRepository.findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc(tenantId, programmeUid)
@@ -109,6 +208,8 @@ public class ProgrammeService {
     public ProgrammeConfig saveConfig(String tenantId, String programmeUid, JsonNode config, String actorId, String actorRole) {
         Programme p = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
             .orElseThrow(() -> new IllegalArgumentException("Programme not found"));
+
+        assertProgrammeEditable(p);
 
         schemaValidator.validate(config);
 
@@ -185,6 +286,218 @@ public class ProgrammeService {
         // kafkaTemplate.send("platform.config.updates", tenantId, event);
 
         return saved;
+    }
+
+    /**
+     * Enables or disables a programme for integration and live processing.
+     * {@link ProgrammeStatus#ACTIVE} accepts integration traffic; {@link ProgrammeStatus#DRAFT} does not.
+     * {@link ProgrammeStatus#ARCHIVED} cannot be changed here (use {@link #archiveProgramme}).
+     */
+    @Transactional
+    public Programme updateProgrammeStatus(
+        String tenantId,
+        String programmeUid,
+        ProgrammeStatus nextStatus,
+        String actorId,
+        String actorRole
+    ) {
+        if (nextStatus == null || nextStatus == ProgrammeStatus.ARCHIVED) {
+            throw new IllegalArgumentException("Status must be ACTIVE or DRAFT");
+        }
+
+        Programme programme = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
+            .orElseThrow(() -> new IllegalArgumentException("Programme not found"));
+
+        assertProgrammeEditable(programme);
+
+        ProgrammeStatus before = programme.getStatus();
+        if (before == nextStatus) {
+            return programme;
+        }
+
+        if (nextStatus == ProgrammeStatus.ACTIVE) {
+            boolean hasConfig = (programme.getActiveConfigVersion() != null && programme.getActiveConfigVersion() > 0)
+                || getActiveConfigOrNull(tenantId, programmeUid) != null;
+            if (!hasConfig) {
+                throw new IllegalArgumentException(
+                    "Save programme configuration before activating this programme for integration."
+                );
+            }
+        }
+
+        programme.setStatus(nextStatus);
+        programme.setUpdatedAt(Instant.now());
+        Programme saved = programmeRepository.save(programme);
+        ruleCacheService.invalidateProgramme(tenantId, programmeUid);
+
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
+            .tenantId(tenantId)
+            .action("PROGRAMME_STATUS_CHANGED")
+            .actorId(actorId)
+            .actorRole(actorRole)
+            .beforeState(Map.of("programmeUid", programmeUid, "status", String.valueOf(before)))
+            .afterState(Map.of("programmeUid", programmeUid, "status", String.valueOf(saved.getStatus())))
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
+
+        return saved;
+    }
+
+    /**
+     * Ensures the programme exists and is {@link ProgrammeStatus#ACTIVE} before integration APIs process requests.
+     */
+    @Transactional(readOnly = true)
+    public void assertProgrammeActiveForIntegration(String tenantId, String programmeUid) {
+        String uid = programmeUid == null || programmeUid.isBlank() ? DEFAULT_PROGRAMME_UID : programmeUid.trim();
+        Programme programme = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, uid)
+            .orElseThrow(() -> new ProgrammeInactiveException(
+                uid,
+                null,
+                "Unknown programme: " + uid
+            ));
+
+        if (programme.getStatus() == ProgrammeStatus.ARCHIVED) {
+            throw new ProgrammeInactiveException(
+                uid,
+                programme.getStatus(),
+                "Programme is archived and cannot be used for integration."
+            );
+        }
+        if (programme.getStatus() != ProgrammeStatus.ACTIVE) {
+            throw new ProgrammeInactiveException(
+                uid,
+                programme.getStatus(),
+                "Programme is inactive. Activate it in My Configurations before sending integration traffic."
+            );
+        }
+    }
+
+    /**
+     * Soft-deletes a programme by marking it {@link Programme.ProgrammeStatus#ARCHIVED}.
+     * Historical config, ledger, and audit rows are retained; the programme is hidden from portal lists.
+     */
+    @Transactional
+    public void archiveProgramme(String tenantId, String programmeUid, String actorId, String actorRole) {
+        tenantOnboardingRepository.findByTenantId(tenantId)
+            .orElseThrow(() -> new TenantNotFoundException(tenantId));
+
+        Programme programme = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
+            .orElseThrow(() -> new IllegalArgumentException("Programme not found"));
+
+        if (programme.getStatus() == Programme.ProgrammeStatus.ARCHIVED) {
+            throw ProgrammeArchiveBlockedException.single(
+                "programmeUid",
+                "This programme is already removed from your configuration list."
+            );
+        }
+
+        Map<String, String> reasons = new LinkedHashMap<>();
+
+        if (DEFAULT_PROGRAMME_UID.equals(programmeUid)) {
+            reasons.put(
+                "programmeUid",
+                "The default programme cannot be removed. It is required for integration defaults."
+            );
+        }
+
+        if (programmeRepository.countByTenantIdAndStatusNot(tenantId, Programme.ProgrammeStatus.ARCHIVED) <= 1) {
+            reasons.put(
+                "programmeUid",
+                "At least one programme must remain in your tenant account."
+            );
+        }
+
+        if (!reasons.isEmpty()) {
+            throw new ProgrammeArchiveBlockedException(
+                "This programme cannot be removed yet. Resolve the listed items and try again.",
+                reasons
+            );
+        }
+
+        CascadeArchiveResult cascade = cascadeArchiveDependencies(tenantId, programmeUid);
+
+        programme.setStatus(Programme.ProgrammeStatus.ARCHIVED);
+        programme.setUpdatedAt(Instant.now());
+        programmeRepository.save(programme);
+        ruleCacheService.invalidateProgramme(tenantId, programmeUid);
+
+        OnboardingAuditLog audit = OnboardingAuditLog.builder()
+            .tenantId(tenantId)
+            .action("PROGRAMME_ARCHIVED")
+            .actorId(actorId)
+            .actorRole(actorRole)
+            .afterState(Map.of(
+                "programmeUid", programmeUid,
+                "name", programme.getName(),
+                "rulesArchived", cascade.rulesArchived(),
+                "campaignsEnded", cascade.campaignsEnded()
+            ))
+            .build();
+        auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
+    }
+
+    private CascadeArchiveResult cascadeArchiveDependencies(String tenantId, String programmeUid) {
+        Instant now = Instant.now();
+        int campaignsEnded = 0;
+        int rulesArchived = 0;
+
+        for (Campaign campaign : campaignRepository.findByTenantIdAndProgrammeUidOrderByPriorityDescCreatedAtDesc(
+            tenantId, programmeUid
+        )) {
+            if (!isTerminalCampaignStatus(campaign.getStatus())) {
+                campaign.setStatus(CampaignStatus.ENDED);
+                campaignRepository.save(campaign);
+                campaignsEnded++;
+            }
+        }
+
+        List<String> campaignUids = campaignRepository
+            .findByTenantIdAndProgrammeUidOrderByPriorityDescCreatedAtDesc(tenantId, programmeUid)
+            .stream()
+            .map(Campaign::getCampaignUid)
+            .filter(uid -> uid != null && !uid.isBlank())
+            .distinct()
+            .toList();
+
+        for (EarnRule rule : earnRuleRepository.findByTenantIdAndProgrammeUidAndStatusNot(
+            tenantId, programmeUid, RuleStatus.ARCHIVED
+        )) {
+            rule.setStatus(RuleStatus.ARCHIVED);
+            rule.setArchivedAt(now);
+            earnRuleRepository.save(rule);
+            rulesArchived++;
+        }
+
+        if (!campaignUids.isEmpty()) {
+            for (EarnRule rule : earnRuleRepository.findByTenantIdAndRuleTypeAndCampaignUidInOrderByPriorityDesc(
+                tenantId, RuleType.CAMPAIGN, campaignUids
+            )) {
+                if (rule.getStatus() != RuleStatus.ARCHIVED) {
+                    rule.setStatus(RuleStatus.ARCHIVED);
+                    rule.setArchivedAt(now);
+                    earnRuleRepository.save(rule);
+                    rulesArchived++;
+                }
+            }
+        }
+
+        return new CascadeArchiveResult(rulesArchived, campaignsEnded);
+    }
+
+    private static boolean isTerminalCampaignStatus(CampaignStatus status) {
+        return status == CampaignStatus.ENDED
+            || status == CampaignStatus.EXHAUSTED
+            || status == CampaignStatus.EXPIRED;
+    }
+
+    private record CascadeArchiveResult(int rulesArchived, int campaignsEnded) {}
+
+    private void assertProgrammeEditable(Programme programme) {
+        if (programme.getStatus() == Programme.ProgrammeStatus.ARCHIVED) {
+            throw new IllegalStateException(
+                "Programme is archived and cannot be modified. Create a new programme instead."
+            );
+        }
     }
 }
 

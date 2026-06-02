@@ -20,6 +20,12 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
         String programmeUid
     );
 
+    long countByTenantIdAndProgrammeUidAndStatusIn(
+        String tenantId,
+        String programmeUid,
+        java.util.Collection<CampaignStatus> statuses
+    );
+
     List<Campaign> findByTenantIdAndProgrammeUidAndStatusOrderByPriorityDescCreatedAtDesc(
         String tenantId,
         String programmeUid,

@@ -5,12 +5,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.service.ProgrammeService;
+import com.loyaltyos.voucher.entity.VoucherDenominationMapping;
+import com.loyaltyos.voucher.repository.VoucherDenominationMappingRepository;
+import com.loyaltyos.voucher.support.VoucherDenominationSupport;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,10 +22,16 @@ public class RewardCatalogService {
 
     private final ProgrammeService programmeService;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<VoucherDenominationMappingRepository> denominationMappingRepository;
 
-    public RewardCatalogService(ProgrammeService programmeService, ObjectMapper objectMapper) {
+    public RewardCatalogService(
+        ProgrammeService programmeService,
+        ObjectMapper objectMapper,
+        ObjectProvider<VoucherDenominationMappingRepository> denominationMappingRepository
+    ) {
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.denominationMappingRepository = Objects.requireNonNull(denominationMappingRepository);
     }
 
     public RewardCatalogSnapshot loadCatalog(String tenantId, String programmeUid) {
@@ -80,7 +90,32 @@ public class RewardCatalogService {
         }
 
         RewardCatalogItem reward = item.get();
+        String catalogUid = reward.rewardUid();
         BigDecimal catalogCost = reward.pointsCost();
+
+        VoucherDenominationMappingRepository mappingRepo = denominationMappingRepository.getIfAvailable();
+        if (mappingRepo != null
+            && mappingRepo.existsByTenantIdAndCatalogRewardUidAndActiveTrue(tenantId, catalogUid)) {
+            if (requestedPoints == null) {
+                errors.put(
+                    "pointsToRedeem",
+                    "pointsToRedeem is required for multi-denomination voucher catalog item " + catalogUid
+                );
+                return new CatalogRedemptionResolution(reward, null, errors);
+            }
+            List<VoucherDenominationMapping> tiers =
+                mappingRepo.findByTenantIdAndCatalogRewardUidAndActiveTrueOrderByPriorityAsc(tenantId, catalogUid);
+            boolean tierMatch = tiers.stream()
+                .anyMatch(t -> VoucherDenominationSupport.amountsEqual(t.getPointsRequired(), requestedPoints));
+            if (!tierMatch) {
+                errors.put(
+                    "pointsToRedeem",
+                    "pointsToRedeem must match a configured denomination tier for catalog " + catalogUid
+                );
+            }
+            return new CatalogRedemptionResolution(reward, requestedPoints, errors);
+        }
+
         if (requestedPoints == null) {
             return new CatalogRedemptionResolution(reward, catalogCost, errors);
         }
@@ -88,7 +123,7 @@ public class RewardCatalogService {
             errors.put(
                 "pointsToRedeem",
                 "pointsToRedeem must equal catalog pointsCost (" + catalogCost.toPlainString() + ") for reward "
-                    + reward.rewardUid()
+                    + catalogUid
             );
         }
         return new CatalogRedemptionResolution(reward, catalogCost, errors);

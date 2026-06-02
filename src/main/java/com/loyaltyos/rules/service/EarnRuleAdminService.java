@@ -21,6 +21,7 @@ import java.util.Set;
 import com.loyaltyos.campaigns.entity.Campaign;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.util.TriggerEventTypes;
+import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.rules.evaluation.ConditionParseException;
 import com.loyaltyos.rules.evaluation.ConditionTreeParser;
 import com.loyaltyos.rules.exception.RuleEngineBadRequestException;
@@ -49,6 +50,7 @@ public class EarnRuleAdminService {
     private final RuleCacheService ruleCacheService;
     private final CampaignRepository campaignRepository;
     private final ObjectMapper objectMapper;
+    private final ProgrammeService programmeService;
 
     public EarnRuleAdminService(
         EarnRuleRepository earnRuleRepository,
@@ -57,7 +59,8 @@ public class EarnRuleAdminService {
         ProgrammeRuleContextLoader programmeRuleContextLoader,
         RuleCacheService ruleCacheService,
         CampaignRepository campaignRepository,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ProgrammeService programmeService
     ) {
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.ruleChangeLogRepository = Objects.requireNonNull(ruleChangeLogRepository, "ruleChangeLogRepository");
@@ -66,12 +69,16 @@ public class EarnRuleAdminService {
         this.ruleCacheService = Objects.requireNonNull(ruleCacheService, "ruleCacheService");
         this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
     }
 
     private record RuleLinkage(RuleType ruleType, String campaignUid, String programmeUid) {}
 
     @Transactional
     public EarnRuleResponse createRule(String tenantId, String programmeUid, RuleUpsertRequest req, String actorId) {
+        if (programmeService.isProgrammeArchived(tenantId, programmeUid)) {
+            throw new RuleEngineBadRequestException("Programme is archived: " + programmeUid);
+        }
         RuleLinkage linkage = resolveRuleLinkage(tenantId, programmeUid, req);
         programmeUid = linkage.programmeUid();
         Set<String> eventAllowlist = programmeRuleContextLoader.resolveAllowedEventPropertyNames(
@@ -235,12 +242,16 @@ public class EarnRuleAdminService {
         return toResponse(saved);
     }
 
+    /**
+     * Soft-deletes a rule (status {@link RuleStatus#ARCHIVED}). Historical definition and change logs are retained.
+     */
     @Transactional
     public void deleteRule(String tenantId, String programmeUid, String ruleUid, String actorId) {
         EarnRule rule = earnRuleRepository.loadForAdminEdit(tenantId, programmeUid, ruleUid)
+            .or(() -> earnRuleRepository.loadForAdminEditByRuleUid(tenantId, ruleUid))
             .orElseThrow(() -> new RuleEngineBadRequestException("Rule not found: " + ruleUid));
         if (rule.getStatus() == RuleStatus.ARCHIVED) {
-            throw new RuleEngineBadRequestException("Rule already archived: " + ruleUid);
+            throw new RuleEngineBadRequestException("Rule already removed: " + ruleUid);
         }
 
         Map<String, Object> beforeState = fullSnapshot(rule);
@@ -257,7 +268,10 @@ public class EarnRuleAdminService {
             .afterState(toJson(fullSnapshot(saved)))
             .build());
 
-        ruleCacheService.invalidateProgramme(tenantId, programmeUid);
+        String resolvedProgrammeUid = rule.getProgrammeUid() == null || rule.getProgrammeUid().isBlank()
+            ? programmeUid
+            : rule.getProgrammeUid();
+        ruleCacheService.invalidateProgramme(tenantId, resolvedProgrammeUid);
     }
 
     @Transactional
@@ -295,8 +309,25 @@ public class EarnRuleAdminService {
             : loadRulesForProgrammeScope(tenantId, programmeUid.trim());
         return rules.stream()
             .filter(r -> filter == null || r.getRuleType() == filter)
+            .filter(r -> isRuleVisibleInPortal(tenantId, r))
             .map(EarnRuleAdminService::toResponse)
             .toList();
+    }
+
+    private boolean isRuleVisibleInPortal(String tenantId, EarnRule rule) {
+        Set<String> archivedProgrammes = programmeService.archivedProgrammeUids(tenantId);
+        if (archivedProgrammes.isEmpty()) {
+            return true;
+        }
+        if (archivedProgrammes.contains(rule.getProgrammeUid())) {
+            return false;
+        }
+        if (rule.getRuleType() == RuleType.CAMPAIGN && rule.getCampaignUid() != null && !rule.getCampaignUid().isBlank()) {
+            return campaignRepository.findByTenantIdAndCampaignUid(tenantId, rule.getCampaignUid().trim())
+                .map(c -> !archivedProgrammes.contains(c.getProgrammeUid()))
+                .orElse(true);
+        }
+        return true;
     }
 
     /**

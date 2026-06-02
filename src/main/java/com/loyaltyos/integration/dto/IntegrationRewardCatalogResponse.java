@@ -34,6 +34,8 @@ public class IntegrationRewardCatalogResponse {
         private int displayOrder;
         private String description;
         private Map<String, Object> metadata;
+        /** Populated for VOUCHER items when inventory module is enabled. */
+        private Long availableCount;
 
         public String getRewardUid() { return rewardUid; }
         public void setRewardUid(String rewardUid) { this.rewardUid = rewardUid; }
@@ -51,6 +53,8 @@ public class IntegrationRewardCatalogResponse {
         public void setDescription(String description) { this.description = description; }
         public Map<String, Object> getMetadata() { return metadata; }
         public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
+        public Long getAvailableCount() { return availableCount; }
+        public void setAvailableCount(Long availableCount) { this.availableCount = availableCount; }
     }
 
     public String getTenantId() { return tenantId; }

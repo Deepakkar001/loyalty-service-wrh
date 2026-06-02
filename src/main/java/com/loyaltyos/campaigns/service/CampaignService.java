@@ -21,6 +21,7 @@ import com.loyaltyos.campaigns.model.CampaignTargetSegment;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.util.TriggerEventTypes;
+import com.loyaltyos.onboarding.service.ProgrammeService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -43,19 +44,22 @@ public class CampaignService {
     private final CampaignProgrammeValidator programmeValidator;
     private final CampaignProperties campaignProperties;
     private final ObjectMapper objectMapper;
+    private final ProgrammeService programmeService;
 
     public CampaignService(
         CampaignRepository campaignRepository,
         CampaignAnalyticsService analyticsService,
         CampaignProgrammeValidator programmeValidator,
         CampaignProperties campaignProperties,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ProgrammeService programmeService
     ) {
         this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.analyticsService = Objects.requireNonNull(analyticsService, "analyticsService");
         this.programmeValidator = Objects.requireNonNull(programmeValidator, "programmeValidator");
         this.campaignProperties = Objects.requireNonNull(campaignProperties, "campaignProperties");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
     }
 
     private void assertCampaignsEnabled() {
@@ -125,6 +129,9 @@ public class CampaignService {
                 ? campaignRepository.findByTenantIdOrderByPriorityDescCreatedAtDesc(tenantId)
                 : campaignRepository.findByTenantIdAndStatusOrderByPriorityDescCreatedAtDesc(tenantId, status);
         }
+        rows = rows.stream()
+            .filter(c -> !programmeService.isProgrammeArchived(tenantId, c.getProgrammeUid()))
+            .toList();
         List<CampaignResponse> out = new ArrayList<>();
         for (Campaign c : rows) {
             out.add(toResponse(c, exceedsThreshold(c.getBudgetTotal())));

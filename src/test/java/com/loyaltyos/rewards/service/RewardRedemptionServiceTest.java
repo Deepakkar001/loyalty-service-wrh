@@ -155,6 +155,8 @@ class RewardRedemptionServiceTest {
 
         RedemptionResult result = service.redeem("t1", request);
         assertThat(result.isIdempotentReplay()).isTrue();
+        assertThat(result.getStatus()).isEqualTo("IDEMPOTENT_REPLAY");
+        assertThat(result.getMessage()).contains("already processed");
         verify(pointsLedgerRepository, never()).save(any());
     }
 

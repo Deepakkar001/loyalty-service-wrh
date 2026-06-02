@@ -13,6 +13,8 @@ public class RedemptionResult {
     private BigDecimal newBalance;
     private Long ledgerId;
     private boolean idempotentReplay;
+    /** Set when {@link #idempotentReplay} is true (e.g. duplicate {@code redemptionId}). */
+    private String message;
     private Instant timestamp;
     private String catalogRewardUid;
     private String catalogRewardName;
@@ -34,6 +36,8 @@ public class RedemptionResult {
     public void setLedgerId(Long ledgerId) { this.ledgerId = ledgerId; }
     public boolean isIdempotentReplay() { return idempotentReplay; }
     public void setIdempotentReplay(boolean idempotentReplay) { this.idempotentReplay = idempotentReplay; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
     public Instant getTimestamp() { return timestamp; }
     public void setTimestamp(Instant timestamp) { this.timestamp = timestamp; }
     public String getCatalogRewardUid() { return catalogRewardUid; }

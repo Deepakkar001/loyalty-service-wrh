@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
 import com.loyaltyos.campaigns.exception.CampaignConflictException;
 import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
+import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -52,6 +53,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidTransition(
             InvalidStatusTransitionException ex, WebRequest request) {
         return buildResponse(HttpStatus.CONFLICT, "INVALID_STATUS_TRANSITION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ProgrammeArchiveBlockedException.class)
+    public ResponseEntity<ErrorResponse> handleProgrammeArchiveBlocked(
+            ProgrammeArchiveBlockedException ex, WebRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(
+            Instant.now(),
+            HttpStatus.CONFLICT.value(),
+            "PROGRAMME_ARCHIVE_BLOCKED",
+            ex.getMessage(),
+            request.getDescription(false),
+            extractTraceId(request),
+            ex.getReasons()
+        ));
     }
 
     @ExceptionHandler(InvalidStateException.class)
@@ -98,6 +113,18 @@ public class GlobalExceptionHandler {
      * (instead of letting them fall through to the catch-all 500 with "An unexpected error
      * occurred"). Common sources: "Unknown business category: X", missing required reason, etc.
      */
+    @ExceptionHandler(ProgrammeInactiveException.class)
+    public ResponseEntity<ErrorResponse> handleProgrammeInactive(
+            ProgrammeInactiveException ex, WebRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "PROGRAMME_INACTIVE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(VoucherCatalogException.class)
+    public ResponseEntity<ErrorResponse> handleVoucherCatalog(
+            VoucherCatalogException ex, WebRequest request) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", ex.getMessage(), request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(
             IllegalArgumentException ex, WebRequest request) {

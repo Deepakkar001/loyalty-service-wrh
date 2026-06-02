@@ -19,7 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,6 +62,7 @@ public class IntegrationEventPayloadResolver {
         String eventType = requiredScalar(flat, "eventType");
         String programmeUid = optionalScalar(flat, "programmeUid").orElse("default");
         flat.putIfAbsent("programmeUid", programmeUid);
+        programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
 
         String eventId = resolveEventId(flat);
         flat.putIfAbsent("eventId", eventId);

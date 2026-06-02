@@ -8,6 +8,7 @@ import com.loyaltyos.rewards.dto.RewardBalanceDetailResponse;
 import com.loyaltyos.rewards.dto.RewardBalanceResponse;
 import com.loyaltyos.rewards.service.PointsLedgerQueryService;
 import com.loyaltyos.rewards.service.RewardBalanceQueryService;
+import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.rewards.service.RewardIssuanceService;
 import com.loyaltyos.rules.enums.LedgerEntryType;
 import org.springframework.data.domain.Page;
@@ -20,21 +21,25 @@ import java.util.Objects;
 @Service
 public class IntegrationBalanceService {
 
+    private final ProgrammeService programmeService;
     private final RewardIssuanceService rewardIssuanceService;
     private final RewardBalanceQueryService rewardBalanceQueryService;
     private final PointsLedgerQueryService pointsLedgerQueryService;
 
     public IntegrationBalanceService(
+        ProgrammeService programmeService,
         RewardIssuanceService rewardIssuanceService,
         RewardBalanceQueryService rewardBalanceQueryService,
         PointsLedgerQueryService pointsLedgerQueryService
     ) {
+        this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
         this.rewardIssuanceService = Objects.requireNonNull(rewardIssuanceService, "rewardIssuanceService");
         this.rewardBalanceQueryService = Objects.requireNonNull(rewardBalanceQueryService, "rewardBalanceQueryService");
         this.pointsLedgerQueryService = Objects.requireNonNull(pointsLedgerQueryService, "pointsLedgerQueryService");
     }
 
     public IntegrationBalanceResponse getBalance(String tenantId, String programmeUid, String customerId) {
+        programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
         RewardBalanceResponse core = rewardIssuanceService.getBalance(tenantId, programmeUid, customerId);
         IntegrationBalanceResponse out = new IntegrationBalanceResponse();
         out.setTenantId(core.getTenantId());
@@ -51,6 +56,7 @@ public class IntegrationBalanceService {
         String programmeUid,
         String customerId
     ) {
+        programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
         RewardBalanceDetailResponse core = rewardBalanceQueryService.getBalanceDetail(
             tenantId, programmeUid, customerId
         );
@@ -74,6 +80,7 @@ public class IntegrationBalanceService {
         Instant to,
         Pageable pageable
     ) {
+        programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
         return pointsLedgerQueryService.listCustomerTransactions(
             tenantId, programmeUid, customerId, entryType, from, to, pageable
         ).map(IntegrationBalanceService::toTransactionResponse);

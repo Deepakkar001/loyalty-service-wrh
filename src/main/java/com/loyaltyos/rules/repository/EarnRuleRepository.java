@@ -51,6 +51,18 @@ public interface EarnRuleRepository extends JpaRepository<EarnRule, Long> {
 
     List<EarnRule> findByTenantIdAndProgrammeUidOrderByPriorityDesc(String tenantId, String programmeUid);
 
+    List<EarnRule> findByTenantIdAndProgrammeUidAndStatusNot(
+        String tenantId,
+        String programmeUid,
+        RuleStatus status
+    );
+
+    long countByTenantIdAndProgrammeUidAndStatusNot(
+        String tenantId,
+        String programmeUid,
+        RuleStatus status
+    );
+
     List<EarnRule> findByTenantIdOrderByPriorityDesc(String tenantId);
 
     List<EarnRule> findByTenantIdAndRuleTypeAndCampaignUidInOrderByPriorityDesc(

@@ -6,9 +6,12 @@ import com.loyaltyos.rewards.exception.RewardInsufficientBalanceException;
 import com.loyaltyos.rewards.exception.RewardRedemptionLimitExceededException;
 import com.loyaltyos.rewards.exception.RewardRedemptionValidationException;
 import com.loyaltyos.onboarding.exception.InvalidStateException;
+import com.loyaltyos.onboarding.exception.ProgrammeInactiveException;
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
 import com.loyaltyos.onboarding.exception.InvalidStatusTransitionException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
+import com.loyaltyos.voucher.exception.VoucherCatalogException;
+import com.loyaltyos.voucher.exception.VoucherOutOfStockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,7 +30,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-@RestControllerAdvice(basePackages = "com.loyaltyos.integration.controller")
+@RestControllerAdvice(basePackages = {
+    "com.loyaltyos.integration.controller",
+    "com.loyaltyos.voucher.controller"
+})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class IntegrationExceptionHandler {
 
@@ -70,6 +76,18 @@ public class IntegrationExceptionHandler {
     @ExceptionHandler(TenantNotFoundException.class)
     public ResponseEntity<EventProcessingErrorResponse> handleTenantNotFound(TenantNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND", ex.getMessage(), false, null);
+    }
+
+    @ExceptionHandler(ProgrammeInactiveException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleProgrammeInactive(ProgrammeInactiveException ex) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("programmeUid", ex.getProgrammeUid());
+        if (ex.getStatus() != null) {
+            details.put("status", ex.getStatus().name());
+        }
+        HttpStatus status = ex.getStatus() == null ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
+        String code = ex.getStatus() == null ? "PROGRAMME_NOT_FOUND" : "PROGRAMME_INACTIVE";
+        return buildError(status, code, ex.getMessage(), false, details);
     }
 
     @ExceptionHandler(InvalidStateException.class)
@@ -133,6 +151,16 @@ public class IntegrationExceptionHandler {
             false,
             details
         );
+    }
+
+    @ExceptionHandler(VoucherOutOfStockException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleVoucherOutOfStock(VoucherOutOfStockException ex) {
+        return buildError(HttpStatus.CONFLICT, "OUT_OF_STOCK", ex.getMessage(), false, null);
+    }
+
+    @ExceptionHandler(VoucherCatalogException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleVoucherCatalog(VoucherCatalogException ex) {
+        return buildError(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", ex.getMessage(), false, null);
     }
 
     @ExceptionHandler(CampaignBadRequestException.class)

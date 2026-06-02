@@ -91,6 +91,8 @@ public class RuleAdminController {
     }
 
     @DeleteMapping("/rules/{ruleUid}")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Remove rule from My Rules (soft archive)",
+        description = "Sets status to ARCHIVED. Rule history is retained; archived rules no longer run in evaluation.")
     public ResponseEntity<Void> deleteRule(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("ruleUid") String ruleUid,

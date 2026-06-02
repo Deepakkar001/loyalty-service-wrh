@@ -3,6 +3,8 @@ package com.loyaltyos.onboarding.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.onboarding.dto.CreateProgrammeRequest;
+import com.loyaltyos.onboarding.dto.ProgrammeStatusPatchRequest;
+import com.loyaltyos.onboarding.dto.UpdateProgrammeRequest;
 import com.loyaltyos.onboarding.dto.UpsertProgrammeConfigRequest;
 import com.loyaltyos.onboarding.dto.ProgrammeConfigBlobResponse;
 import com.loyaltyos.onboarding.dto.ProgrammeSummaryResponse;
@@ -15,8 +17,10 @@ import java.util.Objects;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -59,6 +63,45 @@ public class ProgrammeV2Controller {
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
         var p = programmeService.createProgramme(tenantId, request.getName());
+        return ResponseEntity.ok(ProgrammeSummaryResponse.builder()
+            .programmeUid(p.getProgrammeUid())
+            .name(p.getName())
+            .status(p.getStatus().name())
+            .activeConfigVersion(p.getActiveConfigVersion())
+            .build());
+    }
+
+    @PatchMapping("/api/v2/programmes/{programmeUid}/status")
+    @Operation(summary = "Activate or deactivate programme",
+        description = "ACTIVE programmes accept integration traffic; DRAFT programmes are inactive. "
+            + "Configuration must be saved before activating. ARCHIVED programmes cannot be changed here.")
+    public ResponseEntity<ProgrammeSummaryResponse> patchStatus(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("programmeUid") String programmeUid,
+        @Valid @RequestBody ProgrammeStatusPatchRequest request
+    ) {
+        String tenantId = TenantJwt.tenantId(jwt);
+        var p = programmeService.updateProgrammeStatus(
+            tenantId, programmeUid, request.getStatus(), tenantId, "TENANT"
+        );
+        return ResponseEntity.ok(ProgrammeSummaryResponse.builder()
+            .programmeUid(p.getProgrammeUid())
+            .name(p.getName())
+            .status(p.getStatus().name())
+            .activeConfigVersion(p.getActiveConfigVersion())
+            .build());
+    }
+
+    @PatchMapping("/api/v2/programmes/{programmeUid}")
+    @Operation(summary = "Rename programme",
+        description = "Updates programmes.name and programmeIdentity.programmeName in the active config (new version when config exists).")
+    public ResponseEntity<ProgrammeSummaryResponse> rename(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("programmeUid") String programmeUid,
+        @Valid @RequestBody UpdateProgrammeRequest request
+    ) {
+        String tenantId = TenantJwt.tenantId(jwt);
+        var p = programmeService.renameProgramme(tenantId, programmeUid, request.getName(), tenantId, "TENANT");
         return ResponseEntity.ok(ProgrammeSummaryResponse.builder()
             .programmeUid(p.getProgrammeUid())
             .name(p.getName())
@@ -112,6 +155,20 @@ public class ProgrammeV2Controller {
             .configVersion(saved.getConfigVersion())
             .config(request.getConfig())
             .build());
+    }
+
+    @DeleteMapping("/api/v2/programmes/{programmeUid}")
+    @Operation(summary = "Remove programme from configuration list (soft archive)",
+        description = "Marks the programme ARCHIVED and cascades: archives linked rules, ends linked campaigns. "
+            + "Portal lists hide archived programmes and their related rules/campaigns. "
+            + "Ledger and config history are retained. Blocked for default programme or last remaining programme.")
+    public ResponseEntity<Void> archive(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("programmeUid") String programmeUid
+    ) {
+        String tenantId = TenantJwt.tenantId(jwt);
+        programmeService.archiveProgramme(tenantId, programmeUid, tenantId, "TENANT");
+        return ResponseEntity.noContent().build();
     }
 }
 

@@ -28,6 +28,9 @@ import java.util.Optional;
 public class RewardRedemptionService {
 
     private static final int MAX_POINTS_SCALE = 4;
+    private static final String STATUS_IDEMPOTENT_REPLAY = "IDEMPOTENT_REPLAY";
+    private static final String IDEMPOTENT_REPLAY_MESSAGE =
+        "This redemption was already processed; no additional points were debited.";
 
     private final RewardIssuanceService rewardIssuanceService;
     private final PointsLedgerRepository pointsLedgerRepository;
@@ -170,13 +173,14 @@ public class RewardRedemptionService {
             );
         }
         RedemptionResult result = new RedemptionResult();
-        result.setStatus("SUCCESS");
+        result.setStatus(STATUS_IDEMPOTENT_REPLAY);
         result.setRedemptionId(redemptionId);
         result.setCustomerId(customerId);
         result.setProgrammeUid(programmeUid);
         result.setPointsRedeemed(row.getPoints());
         result.setLedgerId(row.getId());
         result.setIdempotentReplay(true);
+        result.setMessage(IDEMPOTENT_REPLAY_MESSAGE);
         result.setTimestamp(Instant.now());
         result.setNewBalance(rewardIssuanceService.getBalance(tenantId, programmeUid, customerId).getBalance());
         return result;
