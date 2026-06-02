@@ -14,6 +14,8 @@ public class EventProcessingResponse {
     private EarningsInfo earnings;
     private RulesInfo rules;
     private CampaignsInfo campaigns;
+    /** Optional: present when a rule auto-issues a voucher during event processing. */
+    private VoucherIssuanceInfo voucherIssuance;
     private String idempotencyKey;
     private Integer processingTimeMs;
 
@@ -136,6 +138,37 @@ public class EventProcessingResponse {
         public void setEnrolled(List<EnrolledCampaignLine> enrolled) { this.enrolled = enrolled; }
     }
 
+    public static class VoucherIssuanceInfo {
+        private String ruleUid;
+        private String catalogRewardUid;
+        private String status;
+        private String errorMessage;
+        private BigDecimal pointsRedeemed;
+        private BigDecimal selectedFaceValue;
+        private String selectedCurrency;
+        private String code;
+        private String pin;
+
+        public String getRuleUid() { return ruleUid; }
+        public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
+        public String getCatalogRewardUid() { return catalogRewardUid; }
+        public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+        public BigDecimal getPointsRedeemed() { return pointsRedeemed; }
+        public void setPointsRedeemed(BigDecimal pointsRedeemed) { this.pointsRedeemed = pointsRedeemed; }
+        public BigDecimal getSelectedFaceValue() { return selectedFaceValue; }
+        public void setSelectedFaceValue(BigDecimal selectedFaceValue) { this.selectedFaceValue = selectedFaceValue; }
+        public String getSelectedCurrency() { return selectedCurrency; }
+        public void setSelectedCurrency(String selectedCurrency) { this.selectedCurrency = selectedCurrency; }
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+        public String getPin() { return pin; }
+        public void setPin(String pin) { this.pin = pin; }
+    }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public String getEventId() { return eventId; }
@@ -150,6 +183,8 @@ public class EventProcessingResponse {
     public void setRules(RulesInfo rules) { this.rules = rules; }
     public CampaignsInfo getCampaigns() { return campaigns; }
     public void setCampaigns(CampaignsInfo campaigns) { this.campaigns = campaigns; }
+    public VoucherIssuanceInfo getVoucherIssuance() { return voucherIssuance; }
+    public void setVoucherIssuance(VoucherIssuanceInfo voucherIssuance) { this.voucherIssuance = voucherIssuance; }
     public String getIdempotencyKey() { return idempotencyKey; }
     public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
     public Integer getProcessingTimeMs() { return processingTimeMs; }

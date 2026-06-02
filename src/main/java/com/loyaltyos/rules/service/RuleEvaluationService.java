@@ -421,10 +421,65 @@ public class RuleEvaluationService {
                 continue;
             }
             String catalogUid = extractCatalogRewardUid(action);
+            String issueMode = extractConfigString(action, "issueMode");
+            if (issueMode == null || issueMode.isBlank()) {
+                issueMode = "ON_RULE_MATCH";
+            }
+            String selectionMode = extractConfigString(action, "selectionMode");
+            BigDecimal pointsToRedeem = extractConfigAmount(action, "pointsToRedeem");
+            BigDecimal faceValue = extractConfigAmount(action, "faceValue");
+
+            boolean autoIssue = "AUTO_ISSUE_ON_EVENT".equalsIgnoreCase(issueMode);
+            if (autoIssue) {
+                if (selectionMode == null || selectionMode.isBlank()) {
+                    selectionMode = (pointsToRedeem != null) ? "BY_POINTS" : (faceValue != null ? "BY_FACE_VALUE" : null);
+                }
+                if ("BY_POINTS".equalsIgnoreCase(selectionMode) && pointsToRedeem == null) {
+                    grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                        .sourceRuleUid(rule.getRuleUid())
+                        .ruleName(rule.getName())
+                        .catalogRewardUid(catalogUid)
+                        .issueMode(issueMode)
+                        .selectionMode("BY_POINTS")
+                        .valid(false)
+                        .errorMessage("AUTO_ISSUE_ON_EVENT requires pointsToRedeem when selectionMode=BY_POINTS")
+                        .build());
+                    continue;
+                }
+                if ("BY_FACE_VALUE".equalsIgnoreCase(selectionMode) && faceValue == null) {
+                    grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                        .sourceRuleUid(rule.getRuleUid())
+                        .ruleName(rule.getName())
+                        .catalogRewardUid(catalogUid)
+                        .issueMode(issueMode)
+                        .selectionMode("BY_FACE_VALUE")
+                        .valid(false)
+                        .errorMessage("AUTO_ISSUE_ON_EVENT requires faceValue when selectionMode=BY_FACE_VALUE")
+                        .build());
+                    continue;
+                }
+                if (selectionMode == null || (!"BY_POINTS".equalsIgnoreCase(selectionMode) && !"BY_FACE_VALUE".equalsIgnoreCase(selectionMode))) {
+                    grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
+                        .sourceRuleUid(rule.getRuleUid())
+                        .ruleName(rule.getName())
+                        .catalogRewardUid(catalogUid)
+                        .issueMode(issueMode)
+                        .selectionMode(selectionMode)
+                        .valid(false)
+                        .errorMessage("AUTO_ISSUE_ON_EVENT selectionMode must be BY_POINTS or BY_FACE_VALUE")
+                        .build());
+                    continue;
+                }
+            }
+
             if (catalogUid == null) {
                 grants.add(RuleEvaluationResponse.CatalogGrantInfo.builder()
                     .sourceRuleUid(rule.getRuleUid())
                     .ruleName(rule.getName())
+                    .issueMode(issueMode)
+                    .selectionMode(selectionMode)
+                    .pointsToRedeem(pointsToRedeem)
+                    .faceValue(faceValue)
                     .valid(false)
                     .errorMessage("ISSUE_VOUCHER action is missing catalogRewardUid in config")
                     .build());
@@ -436,6 +491,10 @@ public class RuleEvaluationService {
                     .sourceRuleUid(rule.getRuleUid())
                     .ruleName(rule.getName())
                     .catalogRewardUid(catalogUid)
+                    .issueMode(issueMode)
+                    .selectionMode(selectionMode)
+                    .pointsToRedeem(pointsToRedeem)
+                    .faceValue(faceValue)
                     .valid(false)
                     .errorMessage("Unknown or inactive catalog reward: " + catalogUid)
                     .build());
@@ -449,6 +508,10 @@ public class RuleEvaluationService {
                 .catalogRewardName(catalogItem.name())
                 .catalogRewardType(catalogItem.rewardType())
                 .catalogPointsCost(catalogItem.pointsCost())
+                .issueMode(issueMode)
+                .selectionMode(selectionMode)
+                .pointsToRedeem(pointsToRedeem)
+                .faceValue(faceValue)
                 .valid(true)
                 .build());
         }
@@ -465,6 +528,44 @@ public class RuleEvaluationService {
         }
         String uid = uidNode.asText().trim();
         return uid.isEmpty() ? null : uid;
+    }
+
+    private static String extractConfigString(CachedActionSnapshot action, String field) {
+        if (action.getConfig() == null || action.getConfig().isMissingNode() || !action.getConfig().isObject()) {
+            return null;
+        }
+        var n = action.getConfig().get(field);
+        if (n == null || n.isNull() || n.isMissingNode()) {
+            return null;
+        }
+        if (!n.isTextual()) {
+            return String.valueOf(n.asText());
+        }
+        String s = n.asText().trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private static BigDecimal extractConfigAmount(CachedActionSnapshot action, String field) {
+        if (action.getConfig() == null || action.getConfig().isMissingNode() || !action.getConfig().isObject()) {
+            return null;
+        }
+        var n = action.getConfig().get(field);
+        if (n == null || n.isNull() || n.isMissingNode()) {
+            return null;
+        }
+        try {
+            if (n.isNumber()) {
+                return n.decimalValue();
+            }
+            if (n.isTextual()) {
+                String s = n.asText().trim();
+                if (s.isEmpty()) return null;
+                return new BigDecimal(s);
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+        return null;
     }
 
     private List<RuleEvaluationResponse.RewardCommand> scaleCommandsToTotal(

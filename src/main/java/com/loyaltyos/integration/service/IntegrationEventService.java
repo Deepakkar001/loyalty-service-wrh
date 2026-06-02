@@ -231,6 +231,7 @@ public class IntegrationEventService {
     private LoyaltyEventProcessRequest toCoreRequest(IntegrationParsedEvent parsed) {
         LoyaltyEventProcessRequest core = new LoyaltyEventProcessRequest();
         core.setProgrammeUid(parsed.programmeUid());
+        core.setEvaluationScope(parsed.evaluationScope());
         core.setCustomerId(parsed.customerId());
         core.setEventType(parsed.eventType());
         core.setTransactionId(parsed.eventId());

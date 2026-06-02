@@ -13,6 +13,7 @@ public record IntegrationParsedEvent(
     String eventType,
     String eventId,
     String programmeUid,
+    String evaluationScope,
     String customerId,
     BigDecimal amount,
     String customerTierUid,

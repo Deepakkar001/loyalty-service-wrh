@@ -116,6 +116,14 @@ public class RuleEvaluationResponse {
         private String catalogRewardName;
         private String catalogRewardType;
         private BigDecimal catalogPointsCost;
+        /** Action config: default ON_RULE_MATCH (metadata only). */
+        private String issueMode;
+        /** Action config: BY_POINTS or BY_FACE_VALUE (required for AUTO_ISSUE_ON_EVENT). */
+        private String selectionMode;
+        /** Action config: pointsToRedeem to select a denomination tier. */
+        private BigDecimal pointsToRedeem;
+        /** Action config: faceValue to select a denomination tier. */
+        private BigDecimal faceValue;
         private boolean valid;
         private String errorMessage;
 
@@ -130,6 +138,10 @@ public class RuleEvaluationResponse {
             private String catalogRewardName;
             private String catalogRewardType;
             private BigDecimal catalogPointsCost;
+            private String issueMode;
+            private String selectionMode;
+            private BigDecimal pointsToRedeem;
+            private BigDecimal faceValue;
             private boolean valid = true;
             private String errorMessage;
 
@@ -139,6 +151,10 @@ public class RuleEvaluationResponse {
             public Builder catalogRewardName(String v) { this.catalogRewardName = v; return this; }
             public Builder catalogRewardType(String v) { this.catalogRewardType = v; return this; }
             public Builder catalogPointsCost(BigDecimal v) { this.catalogPointsCost = v; return this; }
+            public Builder issueMode(String v) { this.issueMode = v; return this; }
+            public Builder selectionMode(String v) { this.selectionMode = v; return this; }
+            public Builder pointsToRedeem(BigDecimal v) { this.pointsToRedeem = v; return this; }
+            public Builder faceValue(BigDecimal v) { this.faceValue = v; return this; }
             public Builder valid(boolean v) { this.valid = v; return this; }
             public Builder errorMessage(String v) { this.errorMessage = v; return this; }
 
@@ -150,6 +166,10 @@ public class RuleEvaluationResponse {
                 g.catalogRewardName = catalogRewardName;
                 g.catalogRewardType = catalogRewardType;
                 g.catalogPointsCost = catalogPointsCost;
+                g.issueMode = issueMode;
+                g.selectionMode = selectionMode;
+                g.pointsToRedeem = pointsToRedeem;
+                g.faceValue = faceValue;
                 g.valid = valid;
                 g.errorMessage = errorMessage;
                 return g;
@@ -168,6 +188,14 @@ public class RuleEvaluationResponse {
         public void setCatalogRewardType(String catalogRewardType) { this.catalogRewardType = catalogRewardType; }
         public BigDecimal getCatalogPointsCost() { return catalogPointsCost; }
         public void setCatalogPointsCost(BigDecimal catalogPointsCost) { this.catalogPointsCost = catalogPointsCost; }
+        public String getIssueMode() { return issueMode; }
+        public void setIssueMode(String issueMode) { this.issueMode = issueMode; }
+        public String getSelectionMode() { return selectionMode; }
+        public void setSelectionMode(String selectionMode) { this.selectionMode = selectionMode; }
+        public BigDecimal getPointsToRedeem() { return pointsToRedeem; }
+        public void setPointsToRedeem(BigDecimal pointsToRedeem) { this.pointsToRedeem = pointsToRedeem; }
+        public BigDecimal getFaceValue() { return faceValue; }
+        public void setFaceValue(BigDecimal faceValue) { this.faceValue = faceValue; }
         public boolean isValid() { return valid; }
         public void setValid(boolean valid) { this.valid = valid; }
         public String getErrorMessage() { return errorMessage; }

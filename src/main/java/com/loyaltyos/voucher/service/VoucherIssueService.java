@@ -192,12 +192,9 @@ public class VoucherIssueService {
             );
         } catch (RewardInsufficientBalanceException e) {
             releaseInventory(inventory);
-            VoucherIssueResponse response = new VoucherIssueResponse();
-            response.setStatus("INSUFFICIENT_BALANCE");
-            response.setErrorMessage("Customer has insufficient points to redeem voucher");
-            response.setRetryable(false);
-            response.setTimestamp(Instant.now());
-            return response;
+            // Important: rethrow so the transaction rolls back cleanly and integration
+            // error handler can return a 400 (instead of an UnexpectedRollbackException 500).
+            throw e;
         } catch (RuntimeException e) {
             releaseInventory(inventory);
             throw e;
@@ -293,12 +290,9 @@ public class VoucherIssueService {
             );
         } catch (RewardInsufficientBalanceException e) {
             releaseInventory(inventory);
-            VoucherIssueResponse response = new VoucherIssueResponse();
-            response.setStatus("INSUFFICIENT_BALANCE");
-            response.setErrorMessage("Customer has insufficient points to redeem voucher");
-            response.setRetryable(false);
-            response.setTimestamp(Instant.now());
-            return response;
+            // Important: rethrow so the transaction rolls back cleanly and integration
+            // error handler can return a 400 (instead of an UnexpectedRollbackException 500).
+            throw e;
         } catch (RuntimeException e) {
             releaseInventory(inventory);
             throw e;

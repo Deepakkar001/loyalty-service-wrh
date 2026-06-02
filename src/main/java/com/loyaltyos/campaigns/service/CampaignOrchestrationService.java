@@ -36,11 +36,15 @@ import com.loyaltyos.rules.service.RuleEarningCapService;
 import com.loyaltyos.rules.service.RuleEvaluationService;
 import com.loyaltyos.onboarding.service.EventSchemaPayloadValidator;
 import com.loyaltyos.onboarding.service.ProgrammeService;
+import com.loyaltyos.voucher.dto.VoucherIssueResponse;
+import com.loyaltyos.voucher.service.VoucherAutoIssueService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +54,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class CampaignOrchestrationService {
@@ -72,6 +77,10 @@ public class CampaignOrchestrationService {
     private final CampaignJsonSupport jsonSupport;
     private final CampaignParticipationRepository participationRepository;
     private final CampaignResolutionLogRepository resolutionLogRepository;
+    private final VoucherAutoIssueService voucherAutoIssueService;
+    private final TransactionTemplate transactionTemplate;
+
+    private enum EvaluationScope { BOTH, CAMPAIGN, PROGRAMME_RULES }
 
     public CampaignOrchestrationService(
         CampaignProperties campaignProperties,
@@ -88,7 +97,9 @@ public class CampaignOrchestrationService {
         RewardEngineProperties rewardEngineProperties,
         CampaignJsonSupport jsonSupport,
         CampaignParticipationRepository participationRepository,
-        CampaignResolutionLogRepository resolutionLogRepository
+        CampaignResolutionLogRepository resolutionLogRepository,
+        VoucherAutoIssueService voucherAutoIssueService,
+        PlatformTransactionManager transactionManager
     ) {
         this.campaignProperties = Objects.requireNonNull(campaignProperties, "campaignProperties");
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
@@ -105,10 +116,65 @@ public class CampaignOrchestrationService {
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport");
         this.participationRepository = Objects.requireNonNull(participationRepository, "participationRepository");
         this.resolutionLogRepository = Objects.requireNonNull(resolutionLogRepository, "resolutionLogRepository");
+        this.voucherAutoIssueService = Objects.requireNonNull(voucherAutoIssueService, "voucherAutoIssueService");
+        this.transactionTemplate = new TransactionTemplate(
+            Objects.requireNonNull(transactionManager, "transactionManager")
+        );
     }
 
-    @Transactional
+    /**
+     * Commits points/campaign side effects first, then auto-issues vouchers so balance-cache row locks
+     * from earning are not held while {@link VoucherAutoIssueService} debits points (REQUIRES_NEW).
+     */
     public LoyaltyEventProcessResponse process(String tenantId, LoyaltyEventProcessRequest request) {
+        CoreProcessResult core = transactionTemplate.execute(status -> processEventCore(tenantId, request));
+        if (core == null) {
+            return null;
+        }
+        if (core.response().isSuccess() && core.ruleEval() != null) {
+            log.info(
+                "Applying voucher auto-issue after commit (tenant={}, programme={}, customer={}, eventId={})",
+                tenantId,
+                core.programmeUid(),
+                core.customerId(),
+                core.eventId()
+            );
+            applyVoucherAutoIssue(
+                tenantId,
+                core.programmeUid(),
+                core.customerId(),
+                core.eventId(),
+                core.ruleEval(),
+                core.response()
+            );
+
+            // If the voucher issuance debited points in a separate transaction, refresh balance so the
+            // integration response reflects the post-redemption balance.
+            if (core.response().getVoucherIssuance() != null
+                && "SUCCESS".equalsIgnoreCase(core.response().getVoucherIssuance().getStatus())
+                && core.response().getVoucherIssuance().getPointsRedeemed() != null
+                && core.response().getVoucherIssuance().getPointsRedeemed().signum() > 0) {
+                try {
+                    core.response().setNewBalance(
+                        rewardIssuanceService.getBalance(tenantId, core.programmeUid(), core.customerId()).getBalance()
+                    );
+                } catch (RuntimeException e) {
+                    // Keep original newBalance if balance refresh fails; voucher result still returned.
+                    log.warn(
+                        "Unable to refresh balance after voucher debit (tenant={}, programme={}, customer={}, eventId={}): {}",
+                        tenantId,
+                        core.programmeUid(),
+                        core.customerId(),
+                        core.eventId(),
+                        e.getMessage()
+                    );
+                }
+            }
+        }
+        return core.response();
+    }
+
+    CoreProcessResult processEventCore(String tenantId, LoyaltyEventProcessRequest request) {
         Objects.requireNonNull(tenantId, "tenantId");
         Objects.requireNonNull(request, "request");
 
@@ -119,10 +185,15 @@ public class CampaignOrchestrationService {
 
         validateEventPayload(tenantId, programmeUid, request);
 
+        EvaluationScope scope = parseScope(request.getEvaluationScope());
+
         if (campaignProperties.isResolutionLogEnabled()) {
             Optional<CampaignResolutionLog> prior = resolutionLogRepository.findByTenantIdAndEventId(tenantId, eventId);
             if (prior.isPresent()) {
-                return buildResponseFromResolutionLog(tenantId, programmeUid, customerId, eventId, prior.get());
+                LoyaltyEventProcessResponse replay = buildResponseFromResolutionLog(
+                    tenantId, programmeUid, customerId, eventId, prior.get()
+                );
+                return new CoreProcessResult(replay, null, programmeUid, customerId, eventId);
             }
         }
 
@@ -136,7 +207,7 @@ public class CampaignOrchestrationService {
         String resolutionMode = null;
         boolean campaignCapApplied = false;
 
-        if (campaignProperties.isEnabled()) {
+        if (scope != EvaluationScope.PROGRAMME_RULES && campaignProperties.isEnabled()) {
             EligibilityResult eligibility = eligibilityService.findQualifying(tenantId, programmeUid, eventContext);
             allDropped.addAll(eligibility.dropped());
             CampaignResolutionResult resolution = conflictResolver.resolve(eligibility.qualifying(), eventContext);
@@ -146,15 +217,20 @@ public class CampaignOrchestrationService {
             campaignCapApplied = resolution.capApplied();
         }
 
-        RuleEvaluateRequest ruleReq = buildRuleEvaluateRequest(request, programmeUid, eventId);
-        RuleEvaluationResponse ruleEval = ruleEvaluationService.evaluate(tenantId, ruleReq);
+        RuleEvaluationResponse ruleEval = new RuleEvaluationResponse();
+        ruleEval.setSuccess(true);
+        ruleEval.setFinalPointsAwarded(BigDecimal.ZERO);
+        if (scope != EvaluationScope.CAMPAIGN) {
+            RuleEvaluateRequest ruleReq = buildRuleEvaluateRequest(request, programmeUid, eventId);
+            ruleEval = ruleEvaluationService.evaluate(tenantId, ruleReq);
+        }
 
         if (!ruleEval.isSuccess()) {
             LoyaltyEventProcessResponse failure = baseResponse(tenantId, programmeUid, customerId, eventId);
             failure.setSuccess(false);
             failure.setMessage(ruleEval.getMessage());
             failure.setCampaignsDropped(allDropped);
-            return failure;
+            return new CoreProcessResult(failure, null, programmeUid, customerId, eventId);
         }
 
         BigDecimal rulePoints = ruleEval.getFinalPointsAwarded() == null
@@ -180,8 +256,10 @@ public class CampaignOrchestrationService {
         builtAwards = applyBudgetDecrement(tenantId, builtAwards, allDropped);
 
         List<RewardIssueCommandDto> issueCommands = new ArrayList<>();
-        for (RuleEvaluationResponse.RewardCommand rc : ruleEval.getRewardCommands()) {
-            issueCommands.add(toIssueCommand(rc));
+        if (scope != EvaluationScope.CAMPAIGN) {
+            for (RuleEvaluationResponse.RewardCommand rc : ruleEval.getRewardCommands()) {
+                issueCommands.add(toIssueCommand(rc));
+            }
         }
         BigDecimal campaignPoints = BigDecimal.ZERO;
         for (CampaignBuiltAward award : builtAwards) {
@@ -199,19 +277,21 @@ public class CampaignOrchestrationService {
 
         RewardIssueResponse issueResponse = rewardIssuanceService.issue(tenantId, issueRequest);
 
-        persistParticipations(tenantId, programmeUid, customerId, eventId, builtAwards);
-        persistResolutionLog(
-            tenantId,
-            programmeUid,
-            customerId,
-            eventId,
-            eligibilityUids(applying, builtAwards),
-            builtAwards,
-            allDropped,
-            campaignPoints,
-            resolutionMode,
-            campaignCapApplied
-        );
+        if (scope != EvaluationScope.PROGRAMME_RULES) {
+            persistParticipations(tenantId, programmeUid, customerId, eventId, builtAwards);
+            persistResolutionLog(
+                tenantId,
+                programmeUid,
+                customerId,
+                eventId,
+                eligibilityUids(applying, builtAwards),
+                builtAwards,
+                allDropped,
+                campaignPoints,
+                resolutionMode,
+                campaignCapApplied
+            );
+        }
 
         LoyaltyEventProcessResponse response = baseResponse(tenantId, programmeUid, customerId, eventId);
         response.setSuccess(true);
@@ -225,7 +305,107 @@ public class CampaignOrchestrationService {
         response.setResolutionMode(resolutionMode);
         response.setCampaignsApplied(toAppliedLines(builtAwards));
         response.setCampaignsDropped(allDropped);
-        return response;
+
+        return new CoreProcessResult(response, ruleEval, programmeUid, customerId, eventId);
+    }
+
+    private static EvaluationScope parseScope(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return EvaluationScope.BOTH; // preserve existing functionality by default
+        }
+        try {
+            return EvaluationScope.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return EvaluationScope.BOTH;
+        }
+    }
+
+    private record CoreProcessResult(
+        LoyaltyEventProcessResponse response,
+        RuleEvaluationResponse ruleEval,
+        String programmeUid,
+        String customerId,
+        String eventId
+    ) {}
+
+    private void applyVoucherAutoIssue(
+        String tenantId,
+        String programmeUid,
+        String customerId,
+        String eventId,
+        RuleEvaluationResponse ruleEval,
+        LoyaltyEventProcessResponse response
+    ) {
+        if (!voucherAutoIssueService.isEnabled()) {
+            return;
+        }
+        if (ruleEval == null || ruleEval.getCatalogGrants() == null || ruleEval.getCatalogGrants().isEmpty()) {
+            return;
+        }
+        Map<String, Integer> priorities = new HashMap<>();
+        if (ruleEval.getMatchedRules() != null) {
+            for (RuleEvaluationResponse.MatchedRuleInfo m : ruleEval.getMatchedRules()) {
+                priorities.put(m.getRuleUid(), m.getPriority() != null ? m.getPriority() : 0);
+            }
+        }
+
+        // Issue only one: choose best eligible auto-issue grant by priority (higher first).
+        Optional<RuleEvaluationResponse.CatalogGrantInfo> chosen = ruleEval.getCatalogGrants().stream()
+            .filter(g -> g != null && g.isValid())
+            .filter(g -> g.getIssueMode() != null && "AUTO_ISSUE_ON_EVENT".equalsIgnoreCase(g.getIssueMode()))
+            .filter(g -> g.getCatalogRewardUid() != null && !g.getCatalogRewardUid().isBlank())
+            .sorted(Comparator.comparingInt(
+                g -> -(priorities.getOrDefault(g.getSourceRuleUid(), 0))
+            ))
+            .findFirst();
+
+        if (chosen.isEmpty()) {
+            return;
+        }
+
+        RuleEvaluationResponse.CatalogGrantInfo grant = chosen.get();
+        String redemptionId = eventId + ":" + grant.getSourceRuleUid();
+
+        VoucherIssueResponse issued;
+        try {
+            issued = voucherAutoIssueService.autoIssue(
+                tenantId,
+                programmeUid,
+                grant.getCatalogRewardUid(),
+                customerId,
+                redemptionId,
+                grant.getPointsToRedeem(),
+                grant.getFaceValue()
+            );
+        } catch (com.loyaltyos.rewards.exception.RewardInsufficientBalanceException e) {
+            issued = new VoucherIssueResponse();
+            issued.setStatus("INSUFFICIENT_BALANCE");
+            issued.setErrorMessage(e.getMessage());
+            issued.setRetryable(false);
+            issued.setTimestamp(Instant.now());
+        } catch (RuntimeException e) {
+            issued = new VoucherIssueResponse();
+            issued.setStatus("FAILED");
+            issued.setErrorMessage(e.getMessage() != null ? e.getMessage() : "Voucher auto-issue failed");
+            issued.setRetryable(true);
+            issued.setTimestamp(Instant.now());
+        }
+
+        LoyaltyEventProcessResponse.VoucherIssuanceResult out = new LoyaltyEventProcessResponse.VoucherIssuanceResult();
+        out.setRuleUid(grant.getSourceRuleUid());
+        out.setCatalogRewardUid(grant.getCatalogRewardUid());
+        out.setStatus(issued != null ? issued.getStatus() : "FAILED");
+        out.setErrorMessage(issued != null ? issued.getErrorMessage() : "Voucher auto-issue failed");
+        out.setPointsRedeemed(issued != null ? issued.getPointsRedeemed() : null);
+        if (issued != null && issued.getSelectedDenomination() != null) {
+            out.setSelectedFaceValue(issued.getSelectedDenomination().getFaceValue());
+            out.setSelectedCurrency(issued.getSelectedDenomination().getCurrency());
+        }
+        if (issued != null && issued.getVoucher() != null) {
+            out.setCode(issued.getVoucher().getCode());
+            out.setPin(issued.getVoucher().getPin());
+        }
+        response.setVoucherIssuance(out);
     }
 
     private void validateEventPayload(String tenantId, String programmeUid, LoyaltyEventProcessRequest request) {

@@ -46,8 +46,19 @@ public class IntegrationResponseMapper {
         earnings.setTierMultiplier(ruleEval != null && ruleEval.getTierMultiplier() != null
             ? ruleEval.getTierMultiplier() : BigDecimal.ONE);
         earnings.setFinalPoints(total);
-        earnings.setPreviousBalance(previous);
-        earnings.setNewBalance(core.getNewBalance());
+        // If a voucher redemption succeeded in a separate transaction, show balances around the redemption.
+        if (core.getVoucherIssuance() != null
+            && "SUCCESS".equalsIgnoreCase(core.getVoucherIssuance().getStatus())
+            && core.getVoucherIssuance().getPointsRedeemed() != null
+            && core.getVoucherIssuance().getPointsRedeemed().signum() > 0
+            && core.getNewBalance() != null) {
+            BigDecimal redeemed = core.getVoucherIssuance().getPointsRedeemed();
+            earnings.setNewBalance(core.getNewBalance());
+            earnings.setPreviousBalance(core.getNewBalance().add(redeemed));
+        } else {
+            earnings.setPreviousBalance(previous);
+            earnings.setNewBalance(core.getNewBalance());
+        }
         response.setEarnings(earnings);
 
         EventProcessingResponse.RulesInfo rules = new EventProcessingResponse.RulesInfo();
@@ -91,6 +102,22 @@ public class IntegrationResponseMapper {
             }
         }
         response.setCampaigns(campaigns);
+
+        if (core.getVoucherIssuance() != null) {
+            LoyaltyEventProcessResponse.VoucherIssuanceResult vi = core.getVoucherIssuance();
+            EventProcessingResponse.VoucherIssuanceInfo out = new EventProcessingResponse.VoucherIssuanceInfo();
+            out.setRuleUid(vi.getRuleUid());
+            out.setCatalogRewardUid(vi.getCatalogRewardUid());
+            out.setStatus(vi.getStatus());
+            out.setErrorMessage(vi.getErrorMessage());
+            out.setPointsRedeemed(vi.getPointsRedeemed());
+            out.setSelectedFaceValue(vi.getSelectedFaceValue());
+            out.setSelectedCurrency(vi.getSelectedCurrency());
+            out.setCode(vi.getCode());
+            out.setPin(vi.getPin());
+            response.setVoucherIssuance(out);
+        }
+
         return response;
     }
 

@@ -11,6 +11,16 @@ public class LoyaltyEventProcessRequest {
 
     private String programmeUid = "default";
 
+    /**
+     * Determines which engine(s) to run for this event.
+     *
+     * Supported values:
+     * - "BOTH" (default): evaluate campaigns + programme rules (legacy behavior)
+     * - "CAMPAIGN": evaluate campaigns only
+     * - "PROGRAMME_RULES": evaluate programme rules only
+     */
+    private String evaluationScope;
+
     @NotBlank
     private String customerId;
 
@@ -30,6 +40,14 @@ public class LoyaltyEventProcessRequest {
     private Map<String, Object> metadata;
 
     private JsonNode eventPayload;
+
+    public String getEvaluationScope() {
+        return evaluationScope;
+    }
+
+    public void setEvaluationScope(String evaluationScope) {
+        this.evaluationScope = evaluationScope;
+    }
 
     public String getProgrammeUid() {
         return programmeUid;

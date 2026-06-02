@@ -22,6 +22,8 @@ public class LoyaltyEventProcessResponse {
     private String resolutionMode;
     private List<AppliedCampaignLine> campaignsApplied = new ArrayList<>();
     private List<DroppedCampaign> campaignsDropped = new ArrayList<>();
+    /** Optional: populated when a rule is configured to auto-issue voucher on event match. */
+    private VoucherIssuanceResult voucherIssuance;
 
     public String getTenantId() {
         return tenantId;
@@ -141,6 +143,40 @@ public class LoyaltyEventProcessResponse {
 
     public void setCampaignsDropped(List<DroppedCampaign> campaignsDropped) {
         this.campaignsDropped = campaignsDropped;
+    }
+
+    public VoucherIssuanceResult getVoucherIssuance() { return voucherIssuance; }
+    public void setVoucherIssuance(VoucherIssuanceResult voucherIssuance) { this.voucherIssuance = voucherIssuance; }
+
+    public static class VoucherIssuanceResult {
+        private String ruleUid;
+        private String catalogRewardUid;
+        private String status;
+        private String errorMessage;
+        private BigDecimal pointsRedeemed;
+        private BigDecimal selectedFaceValue;
+        private String selectedCurrency;
+        private String code;
+        private String pin;
+
+        public String getRuleUid() { return ruleUid; }
+        public void setRuleUid(String ruleUid) { this.ruleUid = ruleUid; }
+        public String getCatalogRewardUid() { return catalogRewardUid; }
+        public void setCatalogRewardUid(String catalogRewardUid) { this.catalogRewardUid = catalogRewardUid; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getErrorMessage() { return errorMessage; }
+        public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+        public BigDecimal getPointsRedeemed() { return pointsRedeemed; }
+        public void setPointsRedeemed(BigDecimal pointsRedeemed) { this.pointsRedeemed = pointsRedeemed; }
+        public BigDecimal getSelectedFaceValue() { return selectedFaceValue; }
+        public void setSelectedFaceValue(BigDecimal selectedFaceValue) { this.selectedFaceValue = selectedFaceValue; }
+        public String getSelectedCurrency() { return selectedCurrency; }
+        public void setSelectedCurrency(String selectedCurrency) { this.selectedCurrency = selectedCurrency; }
+        public String getCode() { return code; }
+        public void setCode(String code) { this.code = code; }
+        public String getPin() { return pin; }
+        public void setPin(String pin) { this.pin = pin; }
     }
 
     public static class AppliedCampaignLine {

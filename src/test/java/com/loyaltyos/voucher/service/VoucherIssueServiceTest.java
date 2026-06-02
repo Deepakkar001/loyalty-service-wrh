@@ -132,11 +132,10 @@ class VoucherIssueServiceTest {
         when(redemptionService.redeem(eq("t1"), any(RedemptionRequest.class)))
             .thenThrow(new RewardInsufficientBalanceException(new BigDecimal("100"), new BigDecimal("500")));
 
-        VoucherIssueResponse response = service.issueVoucher(
+        assertThatThrownBy(() -> service.issueVoucher(
             "t1", "default", "amazon_500", "cust_1", "red_3"
-        );
+        )).isInstanceOf(RewardInsufficientBalanceException.class);
 
-        assertThat(response.getStatus()).isEqualTo("INSUFFICIENT_BALANCE");
         assertThat(row.getStatus()).isEqualTo(VoucherStatus.AVAILABLE);
         assertThat(row.getRedemptionId()).isNull();
         verify(inventoryRepository).save(row);

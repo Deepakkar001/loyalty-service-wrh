@@ -5,6 +5,7 @@ import com.loyaltyos.integration.dto.IntegrationBalanceResponse;
 import com.loyaltyos.rewards.dto.LedgerTransactionDto;
 import com.loyaltyos.rewards.dto.RewardBalanceDetailResponse;
 import com.loyaltyos.rewards.dto.RewardBalanceResponse;
+import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.rewards.service.PointsLedgerQueryService;
 import com.loyaltyos.rewards.service.RewardBalanceQueryService;
 import com.loyaltyos.rewards.service.RewardIssuanceService;
@@ -25,6 +26,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IntegrationBalanceServiceTest {
+
+    @Mock
+    private ProgrammeService programmeService;
 
     @Mock
     private RewardIssuanceService rewardIssuanceService;

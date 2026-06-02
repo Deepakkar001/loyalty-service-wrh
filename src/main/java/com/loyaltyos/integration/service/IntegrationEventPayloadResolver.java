@@ -64,6 +64,8 @@ public class IntegrationEventPayloadResolver {
         flat.putIfAbsent("programmeUid", programmeUid);
         programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
 
+        String evaluationScope = optionalScalar(flat, "evaluationScope").orElse(null);
+
         String eventId = resolveEventId(flat);
         flat.putIfAbsent("eventId", eventId);
         if (!flat.containsKey("transactionId") || isBlank(flat.get("transactionId"))) {
@@ -93,6 +95,7 @@ public class IntegrationEventPayloadResolver {
             eventType,
             eventId,
             programmeUid,
+            evaluationScope,
             customerId,
             amount,
             customerTierUid,

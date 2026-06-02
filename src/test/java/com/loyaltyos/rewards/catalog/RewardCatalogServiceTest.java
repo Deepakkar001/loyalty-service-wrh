@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.service.ProgrammeService;
+import com.loyaltyos.voucher.repository.VoucherDenominationMappingRepository;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import static org.mockito.Mockito.when;
 
@@ -20,6 +22,9 @@ class RewardCatalogServiceTest {
 
     @Mock
     private ProgrammeService programmeService;
+
+    @Mock
+    private ObjectProvider<VoucherDenominationMappingRepository> denominationMappingRepository;
 
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();

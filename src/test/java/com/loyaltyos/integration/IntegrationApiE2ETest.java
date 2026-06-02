@@ -52,6 +52,7 @@ class IntegrationApiE2ETest {
         "PURCHASE",
         "evt_e2e_1",
         "default",
+        null,
         "cust_1",
         BigDecimal.valueOf(500),
         null,

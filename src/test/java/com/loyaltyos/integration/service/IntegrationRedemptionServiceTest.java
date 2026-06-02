@@ -3,6 +3,7 @@ package com.loyaltyos.integration.service;
 import com.loyaltyos.integration.dto.IntegrationRedemptionRequest;
 import com.loyaltyos.integration.dto.IntegrationRedemptionResponse;
 import com.loyaltyos.integration.dto.IntegrationRedemptionValidationResponse;
+import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.rewards.dto.RedemptionResult;
 import com.loyaltyos.rewards.dto.RedemptionValidationResult;
 import com.loyaltyos.rewards.service.RewardRedemptionService;
@@ -23,6 +24,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IntegrationRedemptionServiceTest {
+
+    @Mock
+    private ProgrammeService programmeService;
 
     @Mock
     private RewardRedemptionService rewardRedemptionService;

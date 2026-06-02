@@ -12,6 +12,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 public class CampaignProperties {
 
+    /**
+     * Controls how {@code /events/process} applies campaigns vs programme rules.
+     */
+    public enum EventProcessingMode {
+        /** Backward-compatible: evaluate both campaigns (if enabled) and programme rules for every event. */
+        LEGACY_BOTH,
+        /**
+         * Mutually exclusive: if request metadata includes {@code evaluationScope=CAMPAIGN} then evaluate campaigns only;
+         * otherwise evaluate programme rules only.
+         */
+        SEPARATE_BY_METADATA
+    }
+
 
 
     private boolean enabled = true;
@@ -21,6 +34,8 @@ public class CampaignProperties {
     private BigDecimal defaultAlertThresholdPct = new BigDecimal("80");
 
     private boolean resolutionLogEnabled = true;
+
+    private EventProcessingMode eventProcessingMode = EventProcessingMode.LEGACY_BOTH;
 
     private boolean budgetAlertWebhookEnabled = true;
 
@@ -94,6 +109,14 @@ public class CampaignProperties {
 
         this.resolutionLogEnabled = resolutionLogEnabled;
 
+    }
+
+    public EventProcessingMode getEventProcessingMode() {
+        return eventProcessingMode;
+    }
+
+    public void setEventProcessingMode(EventProcessingMode eventProcessingMode) {
+        this.eventProcessingMode = eventProcessingMode;
     }
 
 
