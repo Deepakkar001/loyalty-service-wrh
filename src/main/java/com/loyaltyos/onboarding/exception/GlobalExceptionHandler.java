@@ -10,6 +10,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
 import com.loyaltyos.campaigns.exception.CampaignConflictException;
 import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
+import com.loyaltyos.integration.exception.IntegrationApiException;
+import com.loyaltyos.referrals.exception.ReferralException;
 import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -123,6 +125,41 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleVoucherCatalog(
             VoucherCatalogException ex, WebRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", ex.getMessage(), request);
+    }
+
+    /**
+     * Safety net when {@link IntegrationApiException} is thrown outside
+     * {@link com.loyaltyos.integration.exception.IntegrationExceptionHandler} scope.
+     */
+    @ExceptionHandler(IntegrationApiException.class)
+    public ResponseEntity<ErrorResponse> handleIntegrationApi(IntegrationApiException ex, WebRequest request) {
+        if (ex.getHttpStatus().is5xxServerError()) {
+            log.error("Integration API error [{}]: {}", ex.getErrorCode(), ex.getMessage(), ex);
+        } else {
+            log.info("Integration API client error [{}]: {}", ex.getErrorCode(), ex.getMessage());
+        }
+        return buildResponse(ex.getHttpStatus(), ex.getErrorCode(), ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ReferralException.class)
+    public ResponseEntity<ErrorResponse> handleReferral(ReferralException ex, WebRequest request) {
+        HttpStatus status = referralHttpStatus(ex.getCode());
+        return buildResponse(status, ex.getCode(), ex.getMessage(), request);
+    }
+
+    private static HttpStatus referralHttpStatus(String code) {
+        if (code == null) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        return switch (code) {
+            case "REFERRAL_PROGRAMME_NOT_FOUND", "REFERRAL_NOT_FOUND", "REFERRAL_CODE_NOT_FOUND" ->
+                HttpStatus.NOT_FOUND;
+            case "REFERRAL_FRAUD" -> HttpStatus.FORBIDDEN;
+            case "REFERRAL_CAP_EXCEEDED", "REFERRAL_POINTS_BUDGET_EXCEEDED", "REFEREE_NOT_NEW" ->
+                HttpStatus.CONFLICT;
+            case "CODE_GENERATION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+            default -> HttpStatus.BAD_REQUEST;
+        };
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -29,6 +29,12 @@ public interface PointsLedgerRepository extends JpaRepository<PointsLedger, Long
 
     boolean existsByTenantIdAndCustomerIdAndIdempotencyKey(String tenantId, String customerId, String idempotencyKey);
 
+    boolean existsByTenantIdAndProgrammeUidAndCustomerId(
+        String tenantId,
+        String programmeUid,
+        String customerId
+    );
+
     Optional<PointsLedger> findFirstByTenantIdAndCustomerIdAndIdempotencyKey(
         String tenantId,
         String customerId,

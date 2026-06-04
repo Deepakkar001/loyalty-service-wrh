@@ -10,6 +10,7 @@ import com.loyaltyos.onboarding.exception.ProgrammeInactiveException;
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
 import com.loyaltyos.onboarding.exception.InvalidStatusTransitionException;
 import com.loyaltyos.onboarding.exception.TenantNotFoundException;
+import com.loyaltyos.referrals.exception.ReferralException;
 import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import com.loyaltyos.voucher.exception.VoucherOutOfStockException;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ import java.util.UUID;
 
 @RestControllerAdvice(basePackages = {
     "com.loyaltyos.integration.controller",
+    "com.loyaltyos.referrals.controller",
     "com.loyaltyos.voucher.controller"
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -40,10 +42,12 @@ public class IntegrationExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(IntegrationExceptionHandler.class);
 
     @ExceptionHandler(IntegrationApiException.class)
-    public ResponseEntity<EventProcessingErrorResponse> handleIntegration(
-        IntegrationApiException ex,
-        HttpServletRequest request
-    ) {
+    public ResponseEntity<EventProcessingErrorResponse> handleIntegration(IntegrationApiException ex) {
+        if (ex.getHttpStatus().is5xxServerError()) {
+            log.error("Integration API error [{}]: {}", ex.getErrorCode(), ex.getMessage(), ex);
+        } else {
+            log.info("Integration API client error [{}]: {}", ex.getErrorCode(), ex.getMessage());
+        }
         return buildError(
             ex.getHttpStatus(),
             ex.getErrorCode(),
@@ -51,6 +55,13 @@ public class IntegrationExceptionHandler {
             ex.isRetryable(),
             ex.getDetails()
         );
+    }
+
+    @ExceptionHandler(ReferralException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleReferral(ReferralException ex) {
+        HttpStatus status = referralHttpStatus(ex.getCode());
+        log.info("Referral integration client error [{}]: {}", ex.getCode(), ex.getMessage());
+        return buildError(status, ex.getCode(), ex.getMessage(), false, null);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -209,6 +220,21 @@ public class IntegrationExceptionHandler {
             true,
             null
         );
+    }
+
+    private static HttpStatus referralHttpStatus(String code) {
+        if (code == null) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        return switch (code) {
+            case "REFERRAL_PROGRAMME_NOT_FOUND", "REFERRAL_NOT_FOUND", "REFERRAL_CODE_NOT_FOUND" ->
+                HttpStatus.NOT_FOUND;
+            case "REFERRAL_FRAUD" -> HttpStatus.FORBIDDEN;
+            case "REFERRAL_CAP_EXCEEDED", "REFERRAL_POINTS_BUDGET_EXCEEDED", "REFEREE_NOT_NEW" ->
+                HttpStatus.CONFLICT;
+            case "CODE_GENERATION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+            default -> HttpStatus.BAD_REQUEST;
+        };
     }
 
     private static ResponseEntity<EventProcessingErrorResponse> buildError(

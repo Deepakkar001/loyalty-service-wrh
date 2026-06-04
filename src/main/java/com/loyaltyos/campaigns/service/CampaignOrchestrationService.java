@@ -13,6 +13,7 @@ import com.loyaltyos.campaigns.entity.CampaignParticipation;
 import com.loyaltyos.campaigns.entity.CampaignResolutionLog;
 import com.loyaltyos.campaigns.enums.DropReason;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
+import com.loyaltyos.campaigns.model.EvaluationScopeFlags;
 import com.loyaltyos.campaigns.model.BudgetDecrementResult;
 import com.loyaltyos.campaigns.model.CampaignBuiltAward;
 import com.loyaltyos.campaigns.model.CampaignEventContext;
@@ -36,6 +37,16 @@ import com.loyaltyos.rules.service.RuleEarningCapService;
 import com.loyaltyos.rules.service.RuleEvaluationService;
 import com.loyaltyos.onboarding.service.EventSchemaPayloadValidator;
 import com.loyaltyos.onboarding.service.ProgrammeService;
+import com.loyaltyos.referrals.dto.ReferralEvaluationResult;
+import com.loyaltyos.referrals.dto.ReferralIssuanceLine;
+import com.loyaltyos.referrals.dto.ReferralStageRewards;
+import com.loyaltyos.referrals.dto.ReferralVoucherGrantLine;
+import com.loyaltyos.referrals.entity.ReferralProgramme;
+import com.loyaltyos.referrals.model.ReferralProgrammeConfig;
+import com.loyaltyos.referrals.support.ReferralIssuanceSupport;
+import com.loyaltyos.referrals.service.ReferralEvaluationService;
+import com.loyaltyos.referrals.service.ReferralProgrammeService;
+import com.loyaltyos.referrals.service.ReferralRewardDispatchService;
 import com.loyaltyos.voucher.dto.VoucherIssueResponse;
 import com.loyaltyos.voucher.service.VoucherAutoIssueService;
 import java.math.BigDecimal;
@@ -78,9 +89,10 @@ public class CampaignOrchestrationService {
     private final CampaignParticipationRepository participationRepository;
     private final CampaignResolutionLogRepository resolutionLogRepository;
     private final VoucherAutoIssueService voucherAutoIssueService;
+    private final ReferralEvaluationService referralEvaluationService;
+    private final ReferralProgrammeService referralProgrammeService;
+    private final ReferralRewardDispatchService referralRewardDispatchService;
     private final TransactionTemplate transactionTemplate;
-
-    private enum EvaluationScope { BOTH, CAMPAIGN, PROGRAMME_RULES }
 
     public CampaignOrchestrationService(
         CampaignProperties campaignProperties,
@@ -99,6 +111,9 @@ public class CampaignOrchestrationService {
         CampaignParticipationRepository participationRepository,
         CampaignResolutionLogRepository resolutionLogRepository,
         VoucherAutoIssueService voucherAutoIssueService,
+        ReferralEvaluationService referralEvaluationService,
+        ReferralProgrammeService referralProgrammeService,
+        ReferralRewardDispatchService referralRewardDispatchService,
         PlatformTransactionManager transactionManager
     ) {
         this.campaignProperties = Objects.requireNonNull(campaignProperties, "campaignProperties");
@@ -117,6 +132,11 @@ public class CampaignOrchestrationService {
         this.participationRepository = Objects.requireNonNull(participationRepository, "participationRepository");
         this.resolutionLogRepository = Objects.requireNonNull(resolutionLogRepository, "resolutionLogRepository");
         this.voucherAutoIssueService = Objects.requireNonNull(voucherAutoIssueService, "voucherAutoIssueService");
+        this.referralEvaluationService = Objects.requireNonNull(referralEvaluationService, "referralEvaluationService");
+        this.referralProgrammeService = Objects.requireNonNull(referralProgrammeService, "referralProgrammeService");
+        this.referralRewardDispatchService = Objects.requireNonNull(
+            referralRewardDispatchService, "referralRewardDispatchService"
+        );
         this.transactionTemplate = new TransactionTemplate(
             Objects.requireNonNull(transactionManager, "transactionManager")
         );
@@ -185,7 +205,7 @@ public class CampaignOrchestrationService {
 
         validateEventPayload(tenantId, programmeUid, request);
 
-        EvaluationScope scope = parseScope(request.getEvaluationScope());
+        EvaluationScopeFlags scope = EvaluationScopeFlags.parse(request.getEvaluationScope());
 
         if (campaignProperties.isResolutionLogEnabled()) {
             Optional<CampaignResolutionLog> prior = resolutionLogRepository.findByTenantIdAndEventId(tenantId, eventId);
@@ -207,7 +227,7 @@ public class CampaignOrchestrationService {
         String resolutionMode = null;
         boolean campaignCapApplied = false;
 
-        if (scope != EvaluationScope.PROGRAMME_RULES && campaignProperties.isEnabled()) {
+        if (scope.runCampaigns() && campaignProperties.isEnabled()) {
             EligibilityResult eligibility = eligibilityService.findQualifying(tenantId, programmeUid, eventContext);
             allDropped.addAll(eligibility.dropped());
             CampaignResolutionResult resolution = conflictResolver.resolve(eligibility.qualifying(), eventContext);
@@ -220,7 +240,7 @@ public class CampaignOrchestrationService {
         RuleEvaluationResponse ruleEval = new RuleEvaluationResponse();
         ruleEval.setSuccess(true);
         ruleEval.setFinalPointsAwarded(BigDecimal.ZERO);
-        if (scope != EvaluationScope.CAMPAIGN) {
+        if (scope.runProgrammeRules()) {
             RuleEvaluateRequest ruleReq = buildRuleEvaluateRequest(request, programmeUid, eventId);
             ruleEval = ruleEvaluationService.evaluate(tenantId, ruleReq);
         }
@@ -256,11 +276,60 @@ public class CampaignOrchestrationService {
         builtAwards = applyBudgetDecrement(tenantId, builtAwards, allDropped);
 
         List<RewardIssueCommandDto> issueCommands = new ArrayList<>();
-        if (scope != EvaluationScope.CAMPAIGN) {
+        if (scope.runProgrammeRules()) {
             for (RuleEvaluationResponse.RewardCommand rc : ruleEval.getRewardCommands()) {
                 issueCommands.add(toIssueCommand(rc));
             }
         }
+
+        BigDecimal referralPointsToEventCustomer = BigDecimal.ZERO;
+        BigDecimal referralPointsToOtherCustomers = BigDecimal.ZERO;
+        List<ReferralIssuanceLine> deferredReferralLines = new ArrayList<>();
+        List<ReferralVoucherGrantLine> deferredReferralVouchers = new ArrayList<>();
+        String referralUidForDispatch = null;
+        ReferralProgrammeConfig referralConfig = null;
+        if (scope.runReferral()) {
+            ReferralEvaluationResult referralEval = referralEvaluationService.evaluateEvent(
+                tenantId,
+                programmeUid,
+                customerId,
+                eventId,
+                request.getEventType(),
+                request.getAmount(),
+                request.getMetadata()
+            );
+            referralUidForDispatch = referralEval.getReferralUid();
+            ReferralProgramme referralProgramme = referralProgrammeService.getActiveOrNull(tenantId, programmeUid);
+            if (referralProgramme != null) {
+                referralConfig = referralProgrammeService.readConfig(referralProgramme);
+            }
+            for (ReferralIssuanceLine line : referralEval.getIssuanceLines()) {
+                if (line == null) {
+                    continue;
+                }
+                if (line.getCustomerId() != null && line.getCustomerId().equals(customerId) && line.getCommand() != null) {
+                    issueCommands.add(line.getCommand());
+                } else if (line.getCustomerId() != null && line.getCommand() != null) {
+                    deferredReferralLines.add(line);
+                }
+            }
+            referralPointsToEventCustomer = ReferralIssuanceSupport.sumPointsForCustomer(
+                referralEval.getIssuanceLines(), customerId
+            );
+            referralPointsToOtherCustomers = ReferralIssuanceSupport.sumPointsExcludingCustomer(
+                referralEval.getIssuanceLines(), customerId
+            );
+            if (referralEval.getVoucherGrants() != null) {
+                for (ReferralVoucherGrantLine grant : referralEval.getVoucherGrants()) {
+                    if (grant != null) {
+                        deferredReferralVouchers.add(grant);
+                    }
+                }
+            }
+        }
+
+        BigDecimal balanceBeforeIssue = rewardIssuanceService.getBalance(tenantId, programmeUid, customerId).getBalance();
+
         BigDecimal campaignPoints = BigDecimal.ZERO;
         for (CampaignBuiltAward award : builtAwards) {
             if (award.issueCommand() != null) {
@@ -277,7 +346,22 @@ public class CampaignOrchestrationService {
 
         RewardIssueResponse issueResponse = rewardIssuanceService.issue(tenantId, issueRequest);
 
-        if (scope != EvaluationScope.PROGRAMME_RULES) {
+        if ((!deferredReferralLines.isEmpty() || !deferredReferralVouchers.isEmpty()) && referralConfig != null) {
+            ReferralStageRewards deferred = new ReferralStageRewards();
+            deferred.setIssuanceLines(deferredReferralLines);
+            deferred.setVoucherGrants(deferredReferralVouchers);
+            BigDecimal extraReferral = referralRewardDispatchService.dispatchStageRewards(
+                tenantId,
+                programmeUid,
+                referralUidForDispatch != null ? referralUidForDispatch : "unknown",
+                eventId,
+                referralConfig,
+                deferred
+            );
+            referralPointsToOtherCustomers = referralPointsToOtherCustomers.add(extraReferral);
+        }
+
+        if (scope.runCampaigns()) {
             persistParticipations(tenantId, programmeUid, customerId, eventId, builtAwards);
             persistResolutionLog(
                 tenantId,
@@ -299,25 +383,27 @@ public class CampaignOrchestrationService {
         response.setIdempotentReplay(issueResponse.isIdempotentReplay());
         response.setRulePointsAwarded(rulePoints);
         response.setCampaignPointsAwarded(campaignPoints);
-        response.setTotalPointsAwarded(rulePoints.add(campaignPoints));
+        BigDecimal referralPointsTotal = referralPointsToEventCustomer.add(referralPointsToOtherCustomers);
+        response.setReferralPointsAwarded(referralPointsTotal);
+        response.setReferralPointsToOtherCustomers(referralPointsToOtherCustomers);
+        response.setTotalPointsAwarded(rulePoints.add(campaignPoints).add(referralPointsToEventCustomer));
+        response.setPreviousBalance(balanceBeforeIssue);
         response.setNewBalance(issueResponse.getNewBalance());
+        if (!deferredReferralLines.isEmpty()) {
+            try {
+                response.setNewBalance(
+                    rewardIssuanceService.getBalance(tenantId, programmeUid, customerId).getBalance()
+                );
+            } catch (RuntimeException ignored) {
+                // keep issue response balance for event customer
+            }
+        }
         response.setProgrammeCapApplied(capClip.applied());
         response.setResolutionMode(resolutionMode);
         response.setCampaignsApplied(toAppliedLines(builtAwards));
         response.setCampaignsDropped(allDropped);
 
         return new CoreProcessResult(response, ruleEval, programmeUid, customerId, eventId);
-    }
-
-    private static EvaluationScope parseScope(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return EvaluationScope.BOTH; // preserve existing functionality by default
-        }
-        try {
-            return EvaluationScope.valueOf(raw.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return EvaluationScope.BOTH;
-        }
     }
 
     private record CoreProcessResult(

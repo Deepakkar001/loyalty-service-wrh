@@ -16,7 +16,11 @@ public class LoyaltyEventProcessResponse {
     private boolean idempotentReplay;
     private BigDecimal rulePointsAwarded = BigDecimal.ZERO;
     private BigDecimal campaignPointsAwarded = BigDecimal.ZERO;
+    private BigDecimal referralPointsAwarded = BigDecimal.ZERO;
+    /** Referral points credited to parties other than the event customer (e.g. referrer on referee purchase). */
+    private BigDecimal referralPointsToOtherCustomers = BigDecimal.ZERO;
     private BigDecimal totalPointsAwarded = BigDecimal.ZERO;
+    private BigDecimal previousBalance;
     private BigDecimal newBalance;
     private boolean programmeCapApplied;
     private String resolutionMode;
@@ -95,6 +99,30 @@ public class LoyaltyEventProcessResponse {
 
     public void setCampaignPointsAwarded(BigDecimal campaignPointsAwarded) {
         this.campaignPointsAwarded = campaignPointsAwarded;
+    }
+
+    public BigDecimal getReferralPointsAwarded() {
+        return referralPointsAwarded;
+    }
+
+    public void setReferralPointsAwarded(BigDecimal referralPointsAwarded) {
+        this.referralPointsAwarded = referralPointsAwarded;
+    }
+
+    public BigDecimal getReferralPointsToOtherCustomers() {
+        return referralPointsToOtherCustomers;
+    }
+
+    public void setReferralPointsToOtherCustomers(BigDecimal referralPointsToOtherCustomers) {
+        this.referralPointsToOtherCustomers = referralPointsToOtherCustomers;
+    }
+
+    public BigDecimal getPreviousBalance() {
+        return previousBalance;
+    }
+
+    public void setPreviousBalance(BigDecimal previousBalance) {
+        this.previousBalance = previousBalance;
     }
 
     public BigDecimal getTotalPointsAwarded() {

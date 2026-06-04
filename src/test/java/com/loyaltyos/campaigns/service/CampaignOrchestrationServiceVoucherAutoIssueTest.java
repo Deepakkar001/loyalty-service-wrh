@@ -25,6 +25,8 @@ import com.loyaltyos.rules.service.ProgrammeEvaluationContext;
 import com.loyaltyos.rules.service.ProgrammeRuleContextLoader;
 import com.loyaltyos.rules.service.RuleEarningCapService;
 import com.loyaltyos.rules.service.RuleEvaluationService;
+import com.loyaltyos.referrals.service.ReferralEvaluationService;
+import com.loyaltyos.referrals.service.ReferralRewardDispatchService;
 import com.loyaltyos.voucher.dto.VoucherIssueResponse;
 import com.loyaltyos.voucher.service.VoucherAutoIssueService;
 import java.math.BigDecimal;
@@ -56,6 +58,9 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
     @Mock private CampaignParticipationRepository participationRepository;
     @Mock private CampaignResolutionLogRepository resolutionLogRepository;
     @Mock private VoucherAutoIssueService voucherAutoIssueService;
+    @Mock private ReferralEvaluationService referralEvaluationService;
+    @Mock private com.loyaltyos.referrals.service.ReferralProgrammeService referralProgrammeService;
+    @Mock private ReferralRewardDispatchService referralRewardDispatchService;
     @Mock private PlatformTransactionManager transactionManager;
 
     private CampaignOrchestrationService service;
@@ -84,6 +89,9 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
             participationRepository,
             resolutionLogRepository,
             voucherAutoIssueService,
+            referralEvaluationService,
+            referralProgrammeService,
+            referralRewardDispatchService,
             transactionManager
         );
     }

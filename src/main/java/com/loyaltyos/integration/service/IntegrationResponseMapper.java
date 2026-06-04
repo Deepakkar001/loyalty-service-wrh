@@ -38,9 +38,13 @@ public class IntegrationResponseMapper {
         EventProcessingResponse.EarningsInfo earnings = new EventProcessingResponse.EarningsInfo();
         BigDecimal rulePoints = core.getRulePointsAwarded() != null ? core.getRulePointsAwarded() : BigDecimal.ZERO;
         BigDecimal total = core.getTotalPointsAwarded() != null ? core.getTotalPointsAwarded() : BigDecimal.ZERO;
-        BigDecimal previous = core.getNewBalance() != null && total != null
-            ? core.getNewBalance().subtract(total)
-            : BigDecimal.ZERO;
+        BigDecimal previous = core.getPreviousBalance();
+        if (previous == null && core.getNewBalance() != null && total != null) {
+            previous = core.getNewBalance().subtract(total);
+        }
+        if (previous == null) {
+            previous = BigDecimal.ZERO;
+        }
         earnings.setBasePoints(ruleEval != null && ruleEval.getBasePointsCalculated() != null
             ? ruleEval.getBasePointsCalculated() : rulePoints);
         earnings.setTierMultiplier(ruleEval != null && ruleEval.getTierMultiplier() != null
@@ -58,6 +62,10 @@ public class IntegrationResponseMapper {
         } else {
             earnings.setPreviousBalance(previous);
             earnings.setNewBalance(core.getNewBalance());
+        }
+        if (core.getReferralPointsToOtherCustomers() != null
+            && core.getReferralPointsToOtherCustomers().signum() > 0) {
+            earnings.setReferralPointsToOtherCustomers(core.getReferralPointsToOtherCustomers());
         }
         response.setEarnings(earnings);
 

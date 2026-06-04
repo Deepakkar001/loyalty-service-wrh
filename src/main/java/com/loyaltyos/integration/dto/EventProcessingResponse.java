@@ -41,6 +41,8 @@ public class EventProcessingResponse {
         private BigDecimal finalPoints;
         private BigDecimal previousBalance;
         private BigDecimal newBalance;
+        /** Referral points issued to other customers on this event (e.g. referrer), not included in finalPoints. */
+        private BigDecimal referralPointsToOtherCustomers;
         private Instant pointsExpireAt;
 
         public BigDecimal getBasePoints() { return basePoints; }
@@ -53,6 +55,10 @@ public class EventProcessingResponse {
         public void setPreviousBalance(BigDecimal previousBalance) { this.previousBalance = previousBalance; }
         public BigDecimal getNewBalance() { return newBalance; }
         public void setNewBalance(BigDecimal newBalance) { this.newBalance = newBalance; }
+        public BigDecimal getReferralPointsToOtherCustomers() { return referralPointsToOtherCustomers; }
+        public void setReferralPointsToOtherCustomers(BigDecimal referralPointsToOtherCustomers) {
+            this.referralPointsToOtherCustomers = referralPointsToOtherCustomers;
+        }
         public Instant getPointsExpireAt() { return pointsExpireAt; }
         public void setPointsExpireAt(Instant pointsExpireAt) { this.pointsExpireAt = pointsExpireAt; }
     }
