@@ -70,6 +70,7 @@ class IntegrationEventServiceTest {
         "evt_3",
         "default",
         null,
+        null,
         "456",
         BigDecimal.ZERO,
         null,
@@ -91,8 +92,51 @@ class IntegrationEventServiceTest {
 
     LoyaltyEventProcessRequest core = requestCaptor.getValue();
     assertEquals("456", core.getCustomerId());
+    assertNull(core.getCampaignUid());
     assertTrue(core.getEventPayload().has("Orderid"));
     assertEquals("MOBILE_APP", core.getMetadata().get("channel"));
+  }
+
+  @Test
+  void processEvent_mapsCampaignUidToCoreRequest() {
+    CampaignOrchestrationService orchestration = mock(CampaignOrchestrationService.class);
+    LoyaltyEventProcessResponse success = new LoyaltyEventProcessResponse();
+    success.setSuccess(true);
+    when(orchestration.process(eq("t1"), any(LoyaltyEventProcessRequest.class))).thenReturn(success);
+
+    IntegrationResponseMapper mapper = mock(IntegrationResponseMapper.class);
+    EventProcessingResponse mapped = new EventProcessingResponse();
+    when(mapper.toSuccessResponse(any(), eq(success), isNull(), anyInt())).thenReturn(mapped);
+
+    ArgumentCaptor<LoyaltyEventProcessRequest> requestCaptor = ArgumentCaptor.forClass(LoyaltyEventProcessRequest.class);
+
+    IntegrationEventService svc = new IntegrationEventService(
+        orchestration,
+        mock(IntegrationService.class),
+        mock(IntegrationIdempotencyService.class),
+        mapper,
+        mock(IntegrationEventProcessingLogRepository.class),
+        new ObjectMapper()
+    );
+
+    IntegrationParsedEvent parsed = new IntegrationParsedEvent(
+        "PURCHASE",
+        "evt_camp",
+        "default",
+        "CAMPAIGN",
+        "a05c4589-ce7d-4686-96a4-9bc22b313b86",
+        "dev_target_002",
+        BigDecimal.valueOf(500),
+        null,
+        Map.of(),
+        new ObjectMapper().createObjectNode(),
+        Map.of("channel", "WEB")
+    );
+
+    svc.processEvent("t1", parsed, "key1", "{}", "hash");
+
+    verify(orchestration).process(eq("t1"), requestCaptor.capture());
+    assertEquals("a05c4589-ce7d-4686-96a4-9bc22b313b86", requestCaptor.getValue().getCampaignUid());
   }
 
   @Test
@@ -125,6 +169,7 @@ class IntegrationEventServiceTest {
         eventType,
         eventId,
         "default",
+        null,
         null,
         customerId,
         BigDecimal.TEN,

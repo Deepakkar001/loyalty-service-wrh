@@ -69,6 +69,9 @@ public class CampaignUpsertRequest {
     @NotNull
     private Instant validUntil;
 
+    /** ALL (default) or TARGETED — targeted lists are populated via CSV upload. */
+    private String customerScope;
+
     public CampaignUpsertRequest() {}
 
     public String getProgrammeUid() { return programmeUid; }
@@ -111,4 +114,6 @@ public class CampaignUpsertRequest {
     public void setValidFrom(Instant validFrom) { this.validFrom = validFrom; }
     public Instant getValidUntil() { return validUntil; }
     public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
+    public String getCustomerScope() { return customerScope; }
+    public void setCustomerScope(String customerScope) { this.customerScope = customerScope; }
 }

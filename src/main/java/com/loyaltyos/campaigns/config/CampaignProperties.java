@@ -49,6 +49,8 @@ public class CampaignProperties {
 
     private long expiredFixedDelayMs = 300_000L;
 
+    private TargetCustomerUpload targetCustomerUpload = new TargetCustomerUpload();
+
     public boolean isEnabled() {
 
         return enabled;
@@ -197,6 +199,30 @@ public class CampaignProperties {
 
     public void setExpiredFixedDelayMs(long expiredFixedDelayMs) {
         this.expiredFixedDelayMs = expiredFixedDelayMs;
+    }
+
+    public TargetCustomerUpload getTargetCustomerUpload() {
+        return targetCustomerUpload != null ? targetCustomerUpload : new TargetCustomerUpload();
+    }
+
+    public void setTargetCustomerUpload(TargetCustomerUpload targetCustomerUpload) {
+        this.targetCustomerUpload = targetCustomerUpload != null ? targetCustomerUpload : new TargetCustomerUpload();
+    }
+
+    public static class TargetCustomerUpload {
+        private int maxFileSizeMb = 10;
+        private int maxRows = 50_000;
+        private int maxCustomerIdLength = 128;
+        private int minCustomerIdLength = 1;
+
+        public int getMaxFileSizeMb() { return maxFileSizeMb; }
+        public void setMaxFileSizeMb(int maxFileSizeMb) { this.maxFileSizeMb = maxFileSizeMb; }
+        public int getMaxRows() { return maxRows; }
+        public void setMaxRows(int maxRows) { this.maxRows = maxRows; }
+        public int getMaxCustomerIdLength() { return maxCustomerIdLength; }
+        public void setMaxCustomerIdLength(int maxCustomerIdLength) { this.maxCustomerIdLength = maxCustomerIdLength; }
+        public int getMinCustomerIdLength() { return minCustomerIdLength; }
+        public void setMinCustomerIdLength(int minCustomerIdLength) { this.minCustomerIdLength = minCustomerIdLength; }
     }
 
 }

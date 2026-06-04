@@ -2,6 +2,7 @@ package com.loyaltyos.campaigns.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,6 +40,8 @@ public class CampaignResponse {
     private Instant createdAt;
     private Instant updatedAt;
     private boolean budgetExceedsApprovalThreshold;
+    private CustomerScope customerScope;
+    private Integer customerCount;
 
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
@@ -104,4 +107,8 @@ public class CampaignResponse {
     public void setBudgetExceedsApprovalThreshold(boolean budgetExceedsApprovalThreshold) {
         this.budgetExceedsApprovalThreshold = budgetExceedsApprovalThreshold;
     }
+    public CustomerScope getCustomerScope() { return customerScope; }
+    public void setCustomerScope(CustomerScope customerScope) { this.customerScope = customerScope; }
+    public Integer getCustomerCount() { return customerCount; }
+    public void setCustomerCount(Integer customerCount) { this.customerCount = customerCount; }
 }

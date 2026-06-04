@@ -228,7 +228,10 @@ public class CampaignOrchestrationService {
         boolean campaignCapApplied = false;
 
         if (scope.runCampaigns() && campaignProperties.isEnabled()) {
-            EligibilityResult eligibility = eligibilityService.findQualifying(tenantId, programmeUid, eventContext);
+            String scopedCampaignUid = normalizeCampaignUid(request.getCampaignUid());
+            EligibilityResult eligibility = scopedCampaignUid != null
+                ? eligibilityService.findQualifying(tenantId, programmeUid, eventContext, scopedCampaignUid)
+                : eligibilityService.findQualifying(tenantId, programmeUid, eventContext);
             allDropped.addAll(eligibility.dropped());
             CampaignResolutionResult resolution = conflictResolver.resolve(eligibility.qualifying(), eventContext);
             applying = new ArrayList<>(resolution.applying());
@@ -404,6 +407,13 @@ public class CampaignOrchestrationService {
         response.setCampaignsDropped(allDropped);
 
         return new CoreProcessResult(response, ruleEval, programmeUid, customerId, eventId);
+    }
+
+    private static String normalizeCampaignUid(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return raw.trim();
     }
 
     private record CoreProcessResult(

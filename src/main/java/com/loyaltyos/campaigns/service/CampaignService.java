@@ -12,6 +12,7 @@ import com.loyaltyos.campaigns.dto.CampaignStatsResponse;
 import com.loyaltyos.campaigns.dto.CampaignUpsertRequest;
 import com.loyaltyos.campaigns.entity.Campaign;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
 import com.loyaltyos.campaigns.exception.CampaignConflictException;
@@ -93,9 +94,7 @@ public class CampaignService {
     public CampaignResponse update(String tenantId, String campaignUid, CampaignUpsertRequest req, String actorId) {
         assertCampaignsEnabled();
         Campaign existing = loadCampaign(tenantId, campaignUid);
-        if (existing.getStatus() != CampaignStatus.DRAFT) {
-            throw new CampaignConflictException("Only DRAFT campaigns can be updated");
-        }
+        assertCampaignEditableForUpdate(existing);
 
         String programmeUid = programmeValidator.requireProgrammeUid(req.getProgrammeUid());
         if (!programmeUid.equals(existing.getProgrammeUid())) {
@@ -152,6 +151,14 @@ public class CampaignService {
         Instant now = Instant.now();
         if (c.getValidUntil().isBefore(now)) {
             throw new CampaignBadRequestException("Cannot activate: valid_until is in the past");
+        }
+        if (c.getCustomerScope() == CustomerScope.TARGETED) {
+            int count = c.getCustomerCount() != null ? c.getCustomerCount() : 0;
+            if (count <= 0) {
+                throw new CampaignBadRequestException(
+                    "Upload a customer list before activating a targeted campaign"
+                );
+            }
         }
         c.setStatus(CampaignStatus.ACTIVE);
         return toResponse(campaignRepository.save(c), exceedsThreshold(c.getBudgetTotal()));
@@ -272,8 +279,24 @@ public class CampaignService {
         c.setMerchantId(blankToNull(req.getMerchantId()));
         c.setValidFrom(req.getValidFrom());
         c.setValidUntil(req.getValidUntil());
+        if (req.getCustomerScope() != null && !req.getCustomerScope().isBlank()) {
+            c.setCustomerScope(parseCustomerScope(req.getCustomerScope()));
+        } else if (c.getCustomerScope() == null) {
+            c.setCustomerScope(CustomerScope.ALL);
+        }
         if (c.getCreatedBy() == null) {
             c.setCreatedBy(actorId);
+        }
+    }
+
+    private CustomerScope parseCustomerScope(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return CustomerScope.ALL;
+        }
+        try {
+            return CustomerScope.valueOf(raw.trim().toUpperCase());
+        } catch (Exception e) {
+            throw new CampaignBadRequestException("Invalid customerScope: " + raw);
         }
     }
 
@@ -360,6 +383,8 @@ public class CampaignService {
         r.setCreatedAt(c.getCreatedAt());
         r.setUpdatedAt(c.getUpdatedAt());
         r.setBudgetExceedsApprovalThreshold(exceedsThreshold);
+        r.setCustomerScope(c.getCustomerScope() != null ? c.getCustomerScope() : CustomerScope.ALL);
+        r.setCustomerCount(c.getCustomerCount() != null ? c.getCustomerCount() : 0);
         return r;
     }
 
@@ -368,6 +393,15 @@ public class CampaignService {
             return "default";
         }
         return programmeUid.trim();
+    }
+
+    private static void assertCampaignEditableForUpdate(Campaign campaign) {
+        CampaignStatus status = campaign.getStatus();
+        if (status != CampaignStatus.DRAFT && status != CampaignStatus.PAUSED) {
+            throw new CampaignConflictException(
+                "Only draft or paused campaigns can be updated (current status: " + status + ")"
+            );
+        }
     }
 
     private static boolean isTerminalStatus(CampaignStatus status) {

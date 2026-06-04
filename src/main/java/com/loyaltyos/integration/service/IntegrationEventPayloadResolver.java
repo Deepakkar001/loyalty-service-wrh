@@ -65,6 +65,7 @@ public class IntegrationEventPayloadResolver {
         programmeService.assertProgrammeActiveForIntegration(tenantId, programmeUid);
 
         String evaluationScope = optionalScalar(flat, "evaluationScope").orElse(null);
+        String campaignUid = optionalScalar(flat, "campaignUid").orElse(null);
 
         String eventId = resolveEventId(flat);
         flat.putIfAbsent("eventId", eventId);
@@ -96,6 +97,7 @@ public class IntegrationEventPayloadResolver {
             eventId,
             programmeUid,
             evaluationScope,
+            campaignUid,
             customerId,
             amount,
             customerTierUid,

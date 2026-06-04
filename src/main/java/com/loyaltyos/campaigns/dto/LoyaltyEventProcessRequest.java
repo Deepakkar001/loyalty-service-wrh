@@ -21,6 +21,13 @@ public class LoyaltyEventProcessRequest {
      */
     private String evaluationScope;
 
+    /**
+     * When set, only this campaign is evaluated and may issue rewards (tenant campaign UID).
+     * Use when the customer's action is tied to a specific promo (ALL or TARGETED).
+     * Omitted behaviour: all active campaigns on the programme are considered.
+     */
+    private String campaignUid;
+
     @NotBlank
     private String customerId;
 
@@ -47,6 +54,14 @@ public class LoyaltyEventProcessRequest {
 
     public void setEvaluationScope(String evaluationScope) {
         this.evaluationScope = evaluationScope;
+    }
+
+    public String getCampaignUid() {
+        return campaignUid;
+    }
+
+    public void setCampaignUid(String campaignUid) {
+        this.campaignUid = campaignUid;
     }
 
     public String getProgrammeUid() {

@@ -1,7 +1,7 @@
 spring:
   application:
-    name: tenant-onboarding-service
-
+    name: tenant-loyalty-service
+ 
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
  
@@ -29,9 +29,9 @@ spring:
           time_zone: UTC
   # Datasource — values come from environment variables
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/loyaltyos?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectionCollation=utf8mb4_unicode_ci}
     username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:deepak9153}
+    password: ${DB_PASSWORD:Ms@mysql811}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 50
@@ -43,6 +43,7 @@ spring:
       pool-name: onboarding-pool
  
   data:
+    # Local Redis only (not Docker). Start Redis on this host:port before register/login.
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -114,6 +115,29 @@ loyalty:
     budget-alert-kafka-topic: ${LOYALTY_CAMPAIGNS_BUDGET_ALERT_KAFKA_TOPIC:platform.campaign.alerts}
     exhausted-job-enabled: ${LOYALTY_CAMPAIGNS_EXHAUSTED_JOB_ENABLED:true}
     exhausted-fixed-delay-ms: ${LOYALTY_CAMPAIGNS_EXHAUSTED_FIXED_DELAY_MS:300000}
+    expired-job-enabled: ${LOYALTY_CAMPAIGNS_EXPIRED_JOB_ENABLED:true}
+    expired-fixed-delay-ms: ${LOYALTY_CAMPAIGNS_EXPIRED_FIXED_DELAY_MS:300000}
+    target-customer-upload:
+      max-file-size-mb: ${LOYALTY_CAMPAIGNS_TARGET_MAX_FILE_SIZE_MB:10}
+      max-rows: ${LOYALTY_CAMPAIGNS_TARGET_MAX_ROWS:50000}
+      max-customer-id-length: ${LOYALTY_CAMPAIGNS_TARGET_MAX_CUSTOMER_ID_LENGTH:128}
+      min-customer-id-length: ${LOYALTY_CAMPAIGNS_TARGET_MIN_CUSTOMER_ID_LENGTH:1}
+loyaltyos:
+  voucher:
+    enabled: ${LOYALTYOS_VOUCHER_ENABLED:true}
+    max-file-size-mb: ${LOYALTYOS_VOUCHER_MAX_FILE_SIZE_MB:50}
+    max-rows: ${LOYALTYOS_VOUCHER_MAX_ROWS:100000}
+    low-stock-threshold: ${LOYALTYOS_VOUCHER_LOW_STOCK_THRESHOLD:100}
+    expiry-job-enabled: ${LOYALTYOS_VOUCHER_EXPIRY_JOB_ENABLED:true}
+    expiry-cron: ${LOYALTYOS_VOUCHER_EXPIRY_CRON:0 0 2 * * *}
+  integration:
+    encryption-key: ${INTEGRATION_ENCRYPTION_KEY:}
+    rate-limit:
+      redis-enabled: ${INTEGRATION_RATE_LIMIT_REDIS:true}
+      default-requests-per-hour: 1000
+    idempotency:
+      cache-ttl-hours: 24
+ 
 app:
   onboarding:
     # Unverified registrations expire after this many hours.

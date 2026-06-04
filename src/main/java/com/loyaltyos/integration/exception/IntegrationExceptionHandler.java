@@ -1,6 +1,7 @@
 package com.loyaltyos.integration.exception;
 
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
+import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
 import com.loyaltyos.integration.dto.EventProcessingErrorResponse;
 import com.loyaltyos.rewards.exception.RewardInsufficientBalanceException;
 import com.loyaltyos.rewards.exception.RewardRedemptionLimitExceededException;
@@ -183,6 +184,11 @@ public class IntegrationExceptionHandler {
             false,
             ex.getFieldErrors().isEmpty() ? null : ex.getFieldErrors()
         );
+    }
+
+    @ExceptionHandler(CampaignNotFoundException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleCampaignNotFound(CampaignNotFoundException ex) {
+        return buildError(HttpStatus.NOT_FOUND, "CAMPAIGN_NOT_FOUND", ex.getMessage(), false, null);
     }
 
     @ExceptionHandler(ProgrammeConfigValidationException.class)

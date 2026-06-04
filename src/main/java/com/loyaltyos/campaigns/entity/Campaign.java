@@ -2,6 +2,7 @@ package com.loyaltyos.campaigns.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -120,6 +121,13 @@ public class Campaign {
     @Column(name = "valid_until", nullable = false)
     private Instant validUntil;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "customer_scope", nullable = false, length = 32)
+    private CustomerScope customerScope = CustomerScope.ALL;
+
+    @Column(name = "customer_count", nullable = false)
+    private Integer customerCount = 0;
+
     @Column(name = "created_by", length = 255)
     private String createdBy;
 
@@ -185,6 +193,10 @@ public class Campaign {
     public void setValidFrom(Instant validFrom) { this.validFrom = validFrom; }
     public Instant getValidUntil() { return validUntil; }
     public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
+    public CustomerScope getCustomerScope() { return customerScope; }
+    public void setCustomerScope(CustomerScope customerScope) { this.customerScope = customerScope; }
+    public Integer getCustomerCount() { return customerCount; }
+    public void setCustomerCount(Integer customerCount) { this.customerCount = customerCount; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public Instant getCreatedAt() { return createdAt; }

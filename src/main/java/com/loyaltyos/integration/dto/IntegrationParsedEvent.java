@@ -14,6 +14,7 @@ public record IntegrationParsedEvent(
     String eventId,
     String programmeUid,
     String evaluationScope,
+    String campaignUid,
     String customerId,
     BigDecimal amount,
     String customerTierUid,
