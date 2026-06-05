@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.loyaltyos.campaigns.enums.CampaignExecutionMode;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
 import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
@@ -42,6 +43,7 @@ public class CampaignResponse {
     private boolean budgetExceedsApprovalThreshold;
     private CustomerScope customerScope;
     private Integer customerCount;
+    private CampaignExecutionMode executionMode;
 
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
@@ -111,4 +113,6 @@ public class CampaignResponse {
     public void setCustomerScope(CustomerScope customerScope) { this.customerScope = customerScope; }
     public Integer getCustomerCount() { return customerCount; }
     public void setCustomerCount(Integer customerCount) { this.customerCount = customerCount; }
+    public CampaignExecutionMode getExecutionMode() { return executionMode; }
+    public void setExecutionMode(CampaignExecutionMode executionMode) { this.executionMode = executionMode; }
 }

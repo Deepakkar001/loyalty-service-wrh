@@ -4,7 +4,11 @@ For **tenant platform developers** verifying LoyaltyOS before integration.
 
 **Base URL:** `http://localhost:8081` (adjust if different)
 
-**Import collection:** `docs/postman/LoyaltyOS-Campaign-Scoped-Events.postman_collection.json`
+**Import collections:**
+
+- JWT setup: `docs/postman/LoyaltyOS-Campaign-Scoped-Events.postman_collection.json` + `LoyaltyOS-Campaign-Events-Environment.json`
+- Integration (tenant app): `docs/postman/LoyaltyOS-Integration-Collection.json` → folder **Targeted Campaigns**
+- Quick guide: `docs/postman/TARGETED_CAMPAIGNS_TESTING.md`
 
 ---
 
@@ -401,13 +405,49 @@ pm.test("ALL not applied", () => pm.expect(appliedUids).to.not.include(allUid));
 
 ---
 
-## 13. Integration API (optional)
+## 13. Integration API (tenant applications)
 
-Same JSON on:
+Auth: **API key + HMAC** (same as vouchers/referrals). See `docs/INTEGRATION_API_GUIDE.md`.
+
+### 13a. Upload target customers (public)
+
+**GET** `{{baseUrl}}/api/v1/integration/{{tenantId}}/campaigns/target-customers/upload-spec`  
+HMAC: sign **empty** body.
+
+**POST** `{{baseUrl}}/api/v1/integration/{{tenantId}}/campaigns/{{campaignTargetedUid}}/target-customers/bulk`  
+**Body:**
+
+```json
+{
+  "customerIds": ["dev_target_002"]
+}
+```
+
+**Or CSV upload:**  
+**POST** `.../campaigns/{{campaignTargetedUid}}/target-customers/upload`  
+form-data: `file` = your CSV (sign the **raw multipart** body for HMAC).
+
+**GET** `.../campaigns/{{campaignTargetedUid}}/target-customers?page=0&size=20`  
+**GET** `.../campaigns/{{campaignTargetedUid}}/audience` — `customerCount`, `customerScope`, `status`
+
+### 13b. Process events (public)
 
 **POST** `{{baseUrl}}/api/v1/integration/{{tenantId}}/events/process`
 
-Include `campaignUid` in the JSON body. Auth = API key per your integration setup.
+Include `campaignUid` when the checkout knows which promo applied. Example:
+
+```json
+{
+  "programmeUid": "{{programmeUid}}",
+  "evaluationScope": "CAMPAIGN",
+  "campaignUid": "{{campaignTargetedUid}}",
+  "customerId": "dev_target_002",
+  "eventType": "PURCHASE",
+  "eventId": "evt-int-target-001",
+  "amount": 500,
+  "channel": "WEB"
+}
+```
 
 ---
 

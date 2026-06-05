@@ -51,6 +51,9 @@ public class CampaignProperties {
 
     private TargetCustomerUpload targetCustomerUpload = new TargetCustomerUpload();
 
+    /** When true, RULE_GATED campaigns require sandbox pass + ACTIVE CAMPAIGN rule before activation. */
+    private boolean ruleGatedOnly = true;
+
     public boolean isEnabled() {
 
         return enabled;
@@ -207,6 +210,14 @@ public class CampaignProperties {
 
     public void setTargetCustomerUpload(TargetCustomerUpload targetCustomerUpload) {
         this.targetCustomerUpload = targetCustomerUpload != null ? targetCustomerUpload : new TargetCustomerUpload();
+    }
+
+    public boolean isRuleGatedOnly() {
+        return ruleGatedOnly;
+    }
+
+    public void setRuleGatedOnly(boolean ruleGatedOnly) {
+        this.ruleGatedOnly = ruleGatedOnly;
     }
 
     public static class TargetCustomerUpload {

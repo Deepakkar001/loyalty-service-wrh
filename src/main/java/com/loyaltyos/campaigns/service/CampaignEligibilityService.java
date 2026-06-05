@@ -114,7 +114,7 @@ public class CampaignEligibilityService {
         }
     }
 
-    private static boolean matchesTriggerEventType(Campaign campaign, String eventType) {
+    public static boolean matchesTriggerEventType(Campaign campaign, String eventType) {
         String trigger = campaign.getTriggerEventType();
         if (trigger == null || trigger.isBlank() || eventType == null || eventType.isBlank()) {
             return false;
@@ -159,7 +159,7 @@ public class CampaignEligibilityService {
         return new EligibilityResult(qualifying, dropped);
     }
 
-    private boolean matchesCustomerScope(String tenantId, Campaign campaign, String customerId) {
+    public boolean matchesCustomerScope(String tenantId, Campaign campaign, String customerId) {
         CustomerScope scope = campaign.getCustomerScope();
         if (scope == null || scope == CustomerScope.ALL) {
             return true;
@@ -174,7 +174,7 @@ public class CampaignEligibilityService {
         );
     }
 
-    private boolean matchesTargetSegment(Campaign campaign, CampaignEventContext event) {
+    public boolean matchesTargetSegment(Campaign campaign, CampaignEventContext event) {
         CampaignTargetSegment segment = jsonSupport.parseTargetSegment(campaign.getTargetSegment());
 
         if (segment.tierUids() != null && !segment.tierUids().isEmpty()) {

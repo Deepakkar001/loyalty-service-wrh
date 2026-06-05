@@ -2,6 +2,7 @@ package com.loyaltyos.campaigns.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.loyaltyos.campaigns.dto.CampaignEventSchemaUpsertRequest;
+import com.loyaltyos.campaigns.dto.CampaignSetupStatusResponse;
 import com.loyaltyos.campaigns.dto.CampaignResponse;
 import com.loyaltyos.campaigns.dto.CampaignStatsResponse;
 import com.loyaltyos.campaigns.dto.CampaignUpsertRequest;
@@ -67,6 +68,15 @@ public class CampaignAdminController {
     ) {
         String tenantId = requireTenant(jwt);
         return ResponseEntity.ok(campaignService.get(tenantId, campaignUid));
+    }
+
+    @GetMapping("/{campaignUid}/setup-status")
+    public ResponseEntity<CampaignSetupStatusResponse> getSetupStatus(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("campaignUid") String campaignUid
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignService.getSetupStatus(tenantId, campaignUid));
     }
 
     @PutMapping("/{campaignUid}")

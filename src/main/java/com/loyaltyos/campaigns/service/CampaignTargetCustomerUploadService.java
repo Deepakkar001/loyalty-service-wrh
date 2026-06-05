@@ -17,6 +17,7 @@ import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.repository.CampaignTargetCustomerRepository;
 import com.loyaltyos.campaigns.repository.CampaignTargetUploadRepository;
 import com.loyaltyos.campaigns.support.CampaignTargetUploadSpec;
+import com.loyaltyos.campaigns.support.InMemoryCsvMultipartFile;
 import com.loyaltyos.voucher.support.VoucherCodeNormalizer;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -87,6 +88,18 @@ public class CampaignTargetCustomerUploadService {
      * Parses and validates the upload outside a DB transaction so file I/O does not hold a connection.
      */
     public CampaignTargetUploadResponse uploadCsv(String tenantId, String campaignUid, MultipartFile file) {
+        return uploadCsv(tenantId, campaignUid, file, currentActor());
+    }
+
+    /**
+     * @param uploadedBy audit actor (portal user id, or e.g. {@code integration:keyUid})
+     */
+    public CampaignTargetUploadResponse uploadCsv(
+        String tenantId,
+        String campaignUid,
+        MultipartFile file,
+        String uploadedBy
+    ) {
         log.info(
             "Campaign target upload starting tenant={} campaign={} filename={} sizeBytes={}",
             tenantId,
@@ -144,13 +157,39 @@ public class CampaignTargetCustomerUploadService {
             throw new IllegalArgumentException("File exceeds max rows: " + cfg.getMaxRows());
         }
 
+        String actor = normalizeActor(uploadedBy);
         CampaignTargetUploadResponse response = transactionTemplate.execute(
-            status -> persistUpload(tenantId, campaignUid, file, fileSha256, customerIds, cfg)
+            status -> persistUpload(tenantId, campaignUid, file, fileSha256, customerIds, cfg, actor)
         );
         if (response == null) {
             throw new CampaignBadRequestException("Upload transaction did not complete");
         }
         return response;
+    }
+
+    /**
+     * Appends customer IDs via the same validation and persistence path as CSV upload.
+     */
+    public CampaignTargetUploadResponse uploadCustomerIds(
+        String tenantId,
+        String campaignUid,
+        List<String> customerIds,
+        String uploadedBy
+    ) {
+        if (customerIds == null || customerIds.isEmpty()) {
+            throw new CampaignBadRequestException("customerIds must not be empty");
+        }
+        StringBuilder csv = new StringBuilder("customer_id\n");
+        for (String id : customerIds) {
+            if (id != null && !id.isBlank()) {
+                csv.append(id.trim()).append('\n');
+            }
+        }
+        MultipartFile file = new InMemoryCsvMultipartFile(
+            "integration-bulk.csv",
+            csv.toString().getBytes(StandardCharsets.UTF_8)
+        );
+        return uploadCsv(tenantId, campaignUid, file, uploadedBy);
     }
 
     private CampaignTargetUploadResponse persistUpload(
@@ -159,7 +198,8 @@ public class CampaignTargetCustomerUploadService {
         MultipartFile file,
         String fileSha256,
         List<String> customerIds,
-        CampaignProperties.TargetCustomerUpload cfg
+        CampaignProperties.TargetCustomerUpload cfg,
+        String actor
     ) {
         log.info("Campaign target upload persisting tenant={} campaign={}", tenantId, campaignUid);
         Campaign campaign = loadCampaign(tenantId, campaignUid);
@@ -193,13 +233,12 @@ public class CampaignTargetCustomerUploadService {
         batch.setFileSizeBytes(file.getSize());
         batch.setFileSha256(fileSha256);
         batch.setStatus(CampaignTargetUploadStatus.PROCESSING);
-        batch.setUploadedBy(currentActor());
+        batch.setUploadedBy(actor);
         uploadRepository.save(batch);
 
         batch.setTotalRowsUploaded(customerIds.size());
         List<Map<String, Object>> errors = new ArrayList<>();
         List<CampaignTargetCustomer> toInsert = new ArrayList<>();
-        String actor = currentActor();
         Set<String> seenInThisFile = new HashSet<>();
         int fileDuplicateCount = 0;
 
@@ -481,6 +520,13 @@ public class CampaignTargetCustomerUploadService {
             return context.getAuthentication().getName();
         }
         return "SYSTEM";
+    }
+
+    private static String normalizeActor(String uploadedBy) {
+        if (uploadedBy != null && !uploadedBy.isBlank()) {
+            return uploadedBy.trim();
+        }
+        return currentActor();
     }
 }
 

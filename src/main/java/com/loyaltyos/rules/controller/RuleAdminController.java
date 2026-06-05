@@ -1,5 +1,7 @@
 package com.loyaltyos.rules.controller;
 
+import com.loyaltyos.campaigns.dto.RuleSandboxStatusResponse;
+import com.loyaltyos.campaigns.service.CampaignRuleSandboxService;
 import com.loyaltyos.rules.dto.EarnRuleResponse;
 import com.loyaltyos.rules.dto.EarnRuleDetailResponse;
 import com.loyaltyos.rules.dto.RuleChangeLogResponse;
@@ -32,9 +34,14 @@ import java.util.List;
 public class RuleAdminController {
 
     private final EarnRuleAdminService earnRuleAdminService;
+    private final CampaignRuleSandboxService campaignRuleSandboxService;
 
-    public RuleAdminController(EarnRuleAdminService earnRuleAdminService) {
+    public RuleAdminController(
+        EarnRuleAdminService earnRuleAdminService,
+        CampaignRuleSandboxService campaignRuleSandboxService
+    ) {
         this.earnRuleAdminService = Objects.requireNonNull(earnRuleAdminService, "earnRuleAdminService");
+        this.campaignRuleSandboxService = Objects.requireNonNull(campaignRuleSandboxService, "campaignRuleSandboxService");
     }
 
     @PostMapping("/rules")
@@ -101,6 +108,15 @@ public class RuleAdminController {
         String tenantId = requireTenant(jwt);
         earnRuleAdminService.deleteRule(tenantId, programmeUid, ruleUid, tenantId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/rules/{ruleUid}/sandbox-status")
+    public ResponseEntity<RuleSandboxStatusResponse> getSandboxStatus(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("ruleUid") String ruleUid
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignRuleSandboxService.getSandboxStatus(tenantId, ruleUid));
     }
 
     @PatchMapping("/rules/{ruleUid}/status")

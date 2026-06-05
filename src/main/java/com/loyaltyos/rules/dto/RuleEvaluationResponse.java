@@ -211,6 +211,7 @@ public class RuleEvaluationResponse {
         private String actionType;
         private BigDecimal pointsToAward;
         private String sourceRuleUid;
+        private String sourceCampaignUid;
         private Long timestamp;
 
         public RewardCommand() {}
@@ -248,6 +249,7 @@ public class RuleEvaluationResponse {
             private String actionType;
             private BigDecimal pointsToAward;
             private String sourceRuleUid;
+            private String sourceCampaignUid;
             private Long timestamp;
 
             private Builder() {}
@@ -260,10 +262,13 @@ public class RuleEvaluationResponse {
             public Builder actionType(String actionType) { this.actionType = actionType; return this; }
             public Builder pointsToAward(BigDecimal pointsToAward) { this.pointsToAward = pointsToAward; return this; }
             public Builder sourceRuleUid(String sourceRuleUid) { this.sourceRuleUid = sourceRuleUid; return this; }
+            public Builder sourceCampaignUid(String sourceCampaignUid) { this.sourceCampaignUid = sourceCampaignUid; return this; }
             public Builder timestamp(Long timestamp) { this.timestamp = timestamp; return this; }
 
             public RewardCommand build() {
-                return new RewardCommand(commandId, idempotencyKey, tenantId, programmeUid, customerId, actionType, pointsToAward, sourceRuleUid, timestamp);
+                RewardCommand cmd = new RewardCommand(commandId, idempotencyKey, tenantId, programmeUid, customerId, actionType, pointsToAward, sourceRuleUid, timestamp);
+                cmd.setSourceCampaignUid(sourceCampaignUid);
+                return cmd;
             }
         }
 
@@ -283,6 +288,8 @@ public class RuleEvaluationResponse {
         public void setPointsToAward(BigDecimal pointsToAward) { this.pointsToAward = pointsToAward; }
         public String getSourceRuleUid() { return sourceRuleUid; }
         public void setSourceRuleUid(String sourceRuleUid) { this.sourceRuleUid = sourceRuleUid; }
+        public String getSourceCampaignUid() { return sourceCampaignUid; }
+        public void setSourceCampaignUid(String sourceCampaignUid) { this.sourceCampaignUid = sourceCampaignUid; }
         public Long getTimestamp() { return timestamp; }
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
     }

@@ -61,6 +61,7 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
     @Mock private ReferralEvaluationService referralEvaluationService;
     @Mock private com.loyaltyos.referrals.service.ReferralProgrammeService referralProgrammeService;
     @Mock private ReferralRewardDispatchService referralRewardDispatchService;
+    @Mock private com.loyaltyos.campaigns.repository.CampaignRepository campaignRepository;
     @Mock private PlatformTransactionManager transactionManager;
 
     private CampaignOrchestrationService service;
@@ -87,6 +88,7 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
             rewardEngineProperties,
             jsonSupport,
             participationRepository,
+            campaignRepository,
             resolutionLogRepository,
             voucherAutoIssueService,
             referralEvaluationService,

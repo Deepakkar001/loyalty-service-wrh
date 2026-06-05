@@ -12,6 +12,9 @@ import com.loyaltyos.onboarding.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
 import com.loyaltyos.onboarding.enums.ApiKeyStatus;
 import com.loyaltyos.onboarding.enums.OnboardingStatus;
+import com.loyaltyos.campaigns.entity.Campaign;
+import com.loyaltyos.campaigns.service.CampaignRuleSandboxService;
+import com.loyaltyos.campaigns.service.CampaignService;
 import com.loyaltyos.onboarding.dto.SandboxValidateEventRequest;
 import com.loyaltyos.rules.dto.RuleEvaluateRequest;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
@@ -71,6 +74,8 @@ public class IntegrationService {
     private final ProgrammeService programmeService;
     private final IntegrationCredentialCryptoService credentialCryptoService;
     private final IntegrationEventPayloadResolver integrationEventPayloadResolver;
+    private final CampaignRuleSandboxService campaignRuleSandboxService;
+    private final CampaignService campaignService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -85,7 +90,9 @@ public class IntegrationService {
         SandboxTestEventRepository sandboxTestEventRepository,
         ProgrammeService programmeService,
         IntegrationCredentialCryptoService credentialCryptoService,
-        IntegrationEventPayloadResolver integrationEventPayloadResolver
+        IntegrationEventPayloadResolver integrationEventPayloadResolver,
+        CampaignRuleSandboxService campaignRuleSandboxService,
+        CampaignService campaignService
     ) {
         this.tenantOnboardingRepository = Objects.requireNonNull(tenantOnboardingRepository, "tenantOnboardingRepository");
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
@@ -99,6 +106,8 @@ public class IntegrationService {
         this.credentialCryptoService = Objects.requireNonNull(credentialCryptoService, "credentialCryptoService");
         this.integrationEventPayloadResolver = Objects.requireNonNull(
             integrationEventPayloadResolver, "integrationEventPayloadResolver");
+        this.campaignRuleSandboxService = Objects.requireNonNull(campaignRuleSandboxService, "campaignRuleSandboxService");
+        this.campaignService = Objects.requireNonNull(campaignService, "campaignService");
     }
 
     public ApiKeyGeneratedResponse generateSandboxKeysLegacy(String tenantId) {
@@ -209,26 +218,47 @@ public class IntegrationService {
 
         String programmeUid = resolveProgrammeUid(payload);
         Map<String, String> errors = new LinkedHashMap<>();
-        boolean programmeSchemaPresent = false;
+        String schemaSource = "NONE";
+        boolean schemaPresent = false;
+
+        CampaignRuleSandboxService.ResolvedCampaignRule campaignRule = null;
+        if (request.getRuleUid() != null && !request.getRuleUid().isBlank()) {
+            campaignRule = campaignRuleSandboxService.resolveCampaignRule(
+                tenantId, request.getRuleUid().trim(), request.getCampaignUid()
+            );
+        }
+
         try {
-            ProgrammeConfig programmeCfg = programmeService.getActiveConfigOrNull(tenantId, programmeUid);
-            if (programmeCfg != null && programmeCfg.getConfigJson() != null && !programmeCfg.getConfigJson().isBlank()) {
-                programmeSchemaPresent = true;
-                JsonNode root = objectMapper.readTree(programmeCfg.getConfigJson());
-                errors.putAll(EventSchemaPayloadValidator.validatePayload(payload, root));
-            } else {
-                if (!payload.containsKey("eventType")) {
-                    errors.put("eventType", "eventType is required");
+            if (campaignRule != null) {
+                Campaign campaign = campaignRule.campaign();
+                JsonNode campaignSchema = campaignService.getEventSchema(tenantId, campaign.getCampaignUid());
+                if (campaignSchema != null && !campaignSchema.isEmpty() && campaignSchema.size() > 0) {
+                    schemaPresent = true;
+                    schemaSource = "CAMPAIGN";
+                    errors.putAll(EventSchemaPayloadValidator.validatePayload(payload, campaignSchema));
                 }
-                if (!payload.containsKey("timestamp")) {
-                    errors.put("timestamp", "timestamp is required");
-                }
-                if (!payload.containsKey("transactionId")) {
-                    errors.put("transactionId", "transactionId is required");
+            }
+            if (errors.isEmpty() && !schemaPresent) {
+                ProgrammeConfig programmeCfg = programmeService.getActiveConfigOrNull(tenantId, programmeUid);
+                if (programmeCfg != null && programmeCfg.getConfigJson() != null && !programmeCfg.getConfigJson().isBlank()) {
+                    schemaPresent = true;
+                    schemaSource = "PROGRAMME";
+                    JsonNode root = objectMapper.readTree(programmeCfg.getConfigJson());
+                    errors.putAll(EventSchemaPayloadValidator.validatePayload(payload, root));
+                } else {
+                    if (!payload.containsKey("eventType")) {
+                        errors.put("eventType", "eventType is required");
+                    }
+                    if (!payload.containsKey("timestamp")) {
+                        errors.put("timestamp", "timestamp is required");
+                    }
+                    if (!payload.containsKey("transactionId")) {
+                        errors.put("transactionId", "transactionId is required");
+                    }
                 }
             }
         } catch (JsonProcessingException e) {
-            errors.put("programmeConfig", "Unable to read programme configuration");
+            errors.put("schema", "Unable to read event schema configuration");
         }
 
         if (!errors.isEmpty()) {
@@ -240,11 +270,30 @@ public class IntegrationService {
         result.put("status", "VALID");
         result.put("tenantId", tenantId);
         result.put("payload", payload);
-        result.put("schemaPresent", programmeSchemaPresent);
+        result.put("schemaPresent", schemaPresent);
+        result.put("schemaSource", schemaSource);
 
+        boolean targetedCustomerOk = true;
+        String targetedErrorCode = null;
+        String targetedErrorMessage = null;
+        if (campaignRule != null) {
+            String customerId = resolveCustomerId(payload);
+            CampaignRuleSandboxService.TargetedCustomerCheckResult targeted =
+                campaignRuleSandboxService.checkTargetedCustomer(tenantId, campaignRule.campaign(), customerId);
+            targetedCustomerOk = targeted.passed();
+            result.put("targetedCustomerOk", targetedCustomerOk);
+            if (!targeted.passed()) {
+                targetedErrorCode = targeted.errorCode();
+                targetedErrorMessage = targeted.errorMessage();
+                result.put("targetedErrorCode", targetedErrorCode);
+                result.put("targetedErrorMessage", targetedErrorMessage);
+            }
+        }
+
+        RuleEvaluationResponse ruleRes = null;
         try {
             RuleEvaluateRequest ruleReq = integrationEventPayloadResolver.buildRuleEvaluateRequest(payload);
-            RuleEvaluationResponse ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
+            ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
                 ? ruleEvaluationService.evaluateSingleRule(tenantId, request.getRuleUid(), ruleReq)
                 : ruleEvaluationService.evaluate(tenantId, ruleReq);
             result.put("ruleEvaluation", objectMapper.convertValue(ruleRes, new TypeReference<Map<String, Object>>() {}));
@@ -256,8 +305,37 @@ public class IntegrationService {
             result.put("ruleEvaluationError", e.getMessage());
         }
 
+        boolean sandboxPassed = false;
+        if (campaignRule != null && request.getRuleUid() != null && !request.getRuleUid().isBlank()) {
+            boolean ruleMatched = ruleRes != null
+                && ruleRes.getMatchedRules() != null
+                && ruleRes.getMatchedRules().stream()
+                    .anyMatch(m -> request.getRuleUid().trim().equals(m.getRuleUid()));
+            sandboxPassed = ruleMatched && targetedCustomerOk;
+            result.put("sandboxPassed", sandboxPassed);
+            if (sandboxPassed) {
+                campaignRuleSandboxService.recordPass(
+                    tenantId,
+                    campaignRule.campaign().getCampaignUid(),
+                    request.getRuleUid().trim(),
+                    resolveCustomerId(payload),
+                    payload,
+                    targetedCustomerOk,
+                    tenantId
+                );
+            }
+        }
+
         persistSandboxTestEvent(tenantId, payload, result);
         return result;
+    }
+
+    private static String resolveCustomerId(Map<String, Object> payload) {
+        Object raw = payload.get("customerId");
+        if (raw == null) {
+            raw = payload.get("CustomerId");
+        }
+        return raw == null ? "" : String.valueOf(raw).trim();
     }
 
     private static String resolveProgrammeUid(Map<String, Object> payload) {

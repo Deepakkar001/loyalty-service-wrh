@@ -36,6 +36,12 @@ public class CampaignExceptionHandler {
 
     @ExceptionHandler(CampaignConflictException.class)
     public ResponseEntity<Map<String, String>> conflict(CampaignConflictException e) {
+        if (e.getErrorCode() != null && !e.getErrorCode().isBlank()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                "error", e.getErrorCode(),
+                "message", e.getMessage()
+            ));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
     }
 }

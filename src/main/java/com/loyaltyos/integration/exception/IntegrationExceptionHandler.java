@@ -1,6 +1,7 @@
 package com.loyaltyos.integration.exception;
 
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
+import com.loyaltyos.campaigns.exception.CampaignConflictException;
 import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
 import com.loyaltyos.integration.dto.EventProcessingErrorResponse;
 import com.loyaltyos.rewards.exception.RewardInsufficientBalanceException;
@@ -35,7 +36,8 @@ import java.util.UUID;
 @RestControllerAdvice(basePackages = {
     "com.loyaltyos.integration.controller",
     "com.loyaltyos.referrals.controller",
-    "com.loyaltyos.voucher.controller"
+    "com.loyaltyos.voucher.controller",
+    "com.loyaltyos.campaigns.controller"
 })
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class IntegrationExceptionHandler {
@@ -189,6 +191,11 @@ public class IntegrationExceptionHandler {
     @ExceptionHandler(CampaignNotFoundException.class)
     public ResponseEntity<EventProcessingErrorResponse> handleCampaignNotFound(CampaignNotFoundException ex) {
         return buildError(HttpStatus.NOT_FOUND, "CAMPAIGN_NOT_FOUND", ex.getMessage(), false, null);
+    }
+
+    @ExceptionHandler(CampaignConflictException.class)
+    public ResponseEntity<EventProcessingErrorResponse> handleCampaignConflict(CampaignConflictException ex) {
+        return buildError(HttpStatus.CONFLICT, "CAMPAIGN_CONFLICT", ex.getMessage(), false, null);
     }
 
     @ExceptionHandler(ProgrammeConfigValidationException.class)

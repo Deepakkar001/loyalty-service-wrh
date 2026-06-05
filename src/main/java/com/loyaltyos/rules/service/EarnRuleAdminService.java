@@ -18,13 +18,17 @@ import com.loyaltyos.rules.enums.RuleChangeType;
 import com.loyaltyos.rules.enums.RuleStatus;
 import com.loyaltyos.rules.enums.RuleType;
 import java.util.Set;
+import com.loyaltyos.campaigns.config.CampaignProperties;
 import com.loyaltyos.campaigns.entity.Campaign;
+import com.loyaltyos.campaigns.enums.CampaignStatus;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
+import com.loyaltyos.campaigns.service.CampaignRuleSandboxService;
 import com.loyaltyos.campaigns.util.TriggerEventTypes;
 import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.rules.evaluation.ConditionParseException;
 import com.loyaltyos.rules.evaluation.ConditionTreeParser;
 import com.loyaltyos.rules.exception.RuleEngineBadRequestException;
+import com.loyaltyos.rules.exception.RuleEngineConflictException;
 import com.loyaltyos.rules.repository.EarnRuleRepository;
 import com.loyaltyos.rules.repository.RuleChangeLogRepository;
 import org.springframework.stereotype.Service;
@@ -51,6 +55,8 @@ public class EarnRuleAdminService {
     private final CampaignRepository campaignRepository;
     private final ObjectMapper objectMapper;
     private final ProgrammeService programmeService;
+    private final CampaignRuleSandboxService campaignRuleSandboxService;
+    private final CampaignProperties campaignProperties;
 
     public EarnRuleAdminService(
         EarnRuleRepository earnRuleRepository,
@@ -60,7 +66,9 @@ public class EarnRuleAdminService {
         RuleCacheService ruleCacheService,
         CampaignRepository campaignRepository,
         ObjectMapper objectMapper,
-        ProgrammeService programmeService
+        ProgrammeService programmeService,
+        CampaignRuleSandboxService campaignRuleSandboxService,
+        CampaignProperties campaignProperties
     ) {
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.ruleChangeLogRepository = Objects.requireNonNull(ruleChangeLogRepository, "ruleChangeLogRepository");
@@ -70,6 +78,31 @@ public class EarnRuleAdminService {
         this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
+        this.campaignRuleSandboxService = Objects.requireNonNull(campaignRuleSandboxService, "campaignRuleSandboxService");
+        this.campaignProperties = Objects.requireNonNull(campaignProperties, "campaignProperties");
+    }
+
+    private void assertCampaignRuleActivationAllowed(String tenantId, EarnRule rule, RuleStatus next) {
+        if (rule.getRuleType() != RuleType.CAMPAIGN || next != RuleStatus.ACTIVE || !campaignProperties.isRuleGatedOnly()) {
+            return;
+        }
+        if (!campaignRuleSandboxService.hasSandboxPass(tenantId, rule.getRuleUid())) {
+            throw new RuleEngineConflictException(
+                "SANDBOX_REQUIRED",
+                "Pass sandbox test before activating this CAMPAIGN rule"
+            );
+        }
+        if (rule.getCampaignUid() == null || rule.getCampaignUid().isBlank()) {
+            throw new RuleEngineBadRequestException("campaignUid is required for CAMPAIGN rules");
+        }
+        Campaign campaign = campaignRepository.findByTenantIdAndCampaignUid(tenantId, rule.getCampaignUid())
+            .orElseThrow(() -> new RuleEngineBadRequestException("Campaign not found: " + rule.getCampaignUid()));
+        if (campaign.getStatus() != CampaignStatus.DRAFT) {
+            throw new RuleEngineConflictException(
+                "CAMPAIGN_NOT_DRAFT",
+                "CAMPAIGN rules can only be activated while the parent campaign is DRAFT"
+            );
+        }
     }
 
     private record RuleLinkage(RuleType ruleType, String campaignUid, String programmeUid) {}
@@ -280,7 +313,11 @@ public class EarnRuleAdminService {
             .orElseThrow(() -> new RuleEngineBadRequestException("Rule not found: " + ruleUid));
         RuleStatus before = rule.getStatus();
         RuleStatus next = req.getStatus();
+        assertCampaignRuleActivationAllowed(tenantId, rule, next);
         rule.setStatus(next);
+        if (next == RuleStatus.ACTIVE && rule.getActivatedAt() == null) {
+            rule.setActivatedAt(Instant.now());
+        }
         if (next == RuleStatus.ARCHIVED && rule.getArchivedAt() == null) {
             rule.setArchivedAt(Instant.now());
         } else if (before == RuleStatus.ARCHIVED && next != RuleStatus.ARCHIVED) {

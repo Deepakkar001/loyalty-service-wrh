@@ -12,6 +12,7 @@ import com.loyaltyos.campaigns.exception.CampaignConflictException;
 import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
 import com.loyaltyos.integration.exception.IntegrationApiException;
 import com.loyaltyos.referrals.exception.ReferralException;
+import com.loyaltyos.support.exception.SupportException;
 import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -145,6 +146,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleReferral(ReferralException ex, WebRequest request) {
         HttpStatus status = referralHttpStatus(ex.getCode());
         return buildResponse(status, ex.getCode(), ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(SupportException.class)
+    public ResponseEntity<ErrorResponse> handleSupport(SupportException ex, WebRequest request) {
+        HttpStatus status = supportHttpStatus(ex.getCode());
+        return buildResponse(status, ex.getCode(), ex.getMessage(), request);
+    }
+
+    private static HttpStatus supportHttpStatus(String code) {
+        if (code == null) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        return switch (code) {
+            case "CASE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "RATE_LIMIT" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "INVALID_STATUS_TRANSITION" -> HttpStatus.CONFLICT;
+            default -> HttpStatus.BAD_REQUEST;
+        };
     }
 
     private static HttpStatus referralHttpStatus(String code) {

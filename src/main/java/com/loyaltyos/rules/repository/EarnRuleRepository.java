@@ -71,6 +71,63 @@ public interface EarnRuleRepository extends JpaRepository<EarnRule, Long> {
         List<String> campaignUids
     );
 
+    List<EarnRule> findByTenantIdAndCampaignUidAndRuleTypeOrderByPriorityDesc(
+        String tenantId,
+        String campaignUid,
+        RuleType ruleType
+    );
+
+    List<EarnRule> findByTenantIdAndCampaignUidAndRuleTypeAndStatus(
+        String tenantId,
+        String campaignUid,
+        RuleType ruleType,
+        RuleStatus status
+    );
+
+    @Query("""
+        select distinct r from EarnRule r
+        left join fetch r.actions
+        left join fetch r.condition
+        where r.tenantId = :tenantId
+          and r.programmeUid = :programmeUid
+          and r.triggerEventType = :eventType
+          and r.status = :status
+          and r.ruleType = com.loyaltyos.rules.enums.RuleType.PROGRAMME
+          and (r.effectiveAt is null or r.effectiveAt <= :now)
+          and (r.endAt is null or r.endAt > :now)
+        order by r.priority desc
+        """)
+    List<EarnRule> findActiveProgrammeRulesForEvaluation(
+        @Param("tenantId") String tenantId,
+        @Param("programmeUid") String programmeUid,
+        @Param("eventType") String eventType,
+        @Param("status") RuleStatus status,
+        @Param("now") Instant now
+    );
+
+    @Query("""
+        select distinct r from EarnRule r
+        left join fetch r.actions
+        left join fetch r.condition
+        where r.tenantId = :tenantId
+          and r.programmeUid = :programmeUid
+          and r.campaignUid = :campaignUid
+          and r.triggerEventType = :eventType
+          and r.status = :status
+          and r.ruleType = com.loyaltyos.rules.enums.RuleType.CAMPAIGN
+          and (r.effectiveAt is null or r.effectiveAt <= :now)
+          and (r.endAt is null or r.endAt > :now)
+        order by r.priority desc
+        """)
+    List<EarnRule> findActiveCampaignRulesForEvaluation(
+        @Param("tenantId") String tenantId,
+        @Param("programmeUid") String programmeUid,
+        @Param("campaignUid") String campaignUid,
+        @Param("eventType") String eventType,
+        @Param("status") RuleStatus status,
+        @Param("now") Instant now
+    );
+
     @Query("""
         select distinct r from EarnRule r
         left join fetch r.actions

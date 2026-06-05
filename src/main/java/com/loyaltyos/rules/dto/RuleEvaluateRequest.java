@@ -35,6 +35,9 @@ public class RuleEvaluateRequest {
     private String merchantId;
     private Long timestamp;
 
+    /** When set, evaluate CAMPAIGN rules for this campaign only (production events with campaignUid). */
+    private String campaignUid;
+
     public RuleEvaluateRequest() {}
 
     public RuleEvaluateRequest(
@@ -74,6 +77,7 @@ public class RuleEvaluateRequest {
         private String channel;
         private String merchantId;
         private Long timestamp;
+        private String campaignUid;
 
         private Builder() {}
 
@@ -87,9 +91,10 @@ public class RuleEvaluateRequest {
         public Builder channel(String channel) { this.channel = channel; return this; }
         public Builder merchantId(String merchantId) { this.merchantId = merchantId; return this; }
         public Builder timestamp(Long timestamp) { this.timestamp = timestamp; return this; }
+        public Builder campaignUid(String campaignUid) { this.campaignUid = campaignUid; return this; }
 
         public RuleEvaluateRequest build() {
-            return new RuleEvaluateRequest(
+            RuleEvaluateRequest req = new RuleEvaluateRequest(
                 programmeUid,
                 customerId,
                 customerTierUid,
@@ -101,6 +106,8 @@ public class RuleEvaluateRequest {
                 merchantId,
                 timestamp
             );
+            req.setCampaignUid(campaignUid);
+            return req;
         }
     }
 
@@ -124,4 +131,6 @@ public class RuleEvaluateRequest {
     public void setMerchantId(String merchantId) { this.merchantId = merchantId; }
     public Long getTimestamp() { return timestamp; }
     public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
+    public String getCampaignUid() { return campaignUid; }
+    public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
 }

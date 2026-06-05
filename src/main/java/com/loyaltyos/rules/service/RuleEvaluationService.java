@@ -18,6 +18,8 @@ import com.loyaltyos.rules.evaluation.ConditionTreeParser;
 import com.loyaltyos.rules.evaluation.SpelEvaluationService;
 import com.loyaltyos.rewards.catalog.RewardCatalogItem;
 import com.loyaltyos.rewards.catalog.RewardCatalogService;
+import com.loyaltyos.campaigns.model.CampaignEventContext;
+import com.loyaltyos.campaigns.service.CampaignRuleRuntimeGuard;
 import com.loyaltyos.rules.repository.EarnRuleRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Objects;
@@ -58,6 +60,7 @@ public class RuleEvaluationService {
     private final RuleEarningCapService ruleEarningCapService;
     private final RewardCatalogService rewardCatalogService;
     private final ObjectProvider<MeterRegistry> meterRegistry;
+    private final CampaignRuleRuntimeGuard campaignRuleRuntimeGuard;
 
     public RuleEvaluationService(
         EarnRuleRepository earnRuleRepository,
@@ -70,7 +73,8 @@ public class RuleEvaluationService {
         RuleEvaluationAuditWriter auditWriter,
         RuleEarningCapService ruleEarningCapService,
         RewardCatalogService rewardCatalogService,
-        ObjectProvider<MeterRegistry> meterRegistry
+        ObjectProvider<MeterRegistry> meterRegistry,
+        CampaignRuleRuntimeGuard campaignRuleRuntimeGuard
     ) {
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.programmeRuleContextLoader = Objects.requireNonNull(programmeRuleContextLoader, "programmeRuleContextLoader");
@@ -83,6 +87,7 @@ public class RuleEvaluationService {
         this.ruleEarningCapService = Objects.requireNonNull(ruleEarningCapService, "ruleEarningCapService");
         this.rewardCatalogService = Objects.requireNonNull(rewardCatalogService, "rewardCatalogService");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
+        this.campaignRuleRuntimeGuard = Objects.requireNonNull(campaignRuleRuntimeGuard, "campaignRuleRuntimeGuard");
     }
 
     @Transactional(readOnly = true)
@@ -221,11 +226,27 @@ public class RuleEvaluationService {
             Map<String, Object> customerMap = buildCustomerMap(request, progCtx);
             Map<String, Object> tenantMap = progCtx.asTenantVariableMap();
 
-            List<CachedRuleSnapshot> snapshots = loadSnapshots(tenantId, programmeUid, request.getEventType(), now);
+            List<CachedRuleSnapshot> snapshots = loadSnapshots(tenantId, programmeUid, request.getEventType(), now, request);
             trace.put("rulesEvaluated", snapshots.size());
+
+            CampaignEventContext campaignEvent = new CampaignEventContext(
+                request.getCustomerId(),
+                request.getCustomerTierUid(),
+                request.getEventType(),
+                request.getAmount(),
+                request.getChannel(),
+                null
+            );
 
             List<MatchOutcome> outcomes = new ArrayList<>();
             for (CachedRuleSnapshot rule : snapshots) {
+                if (RuleType.CAMPAIGN.name().equals(rule.getRuleType())) {
+                    if (!campaignRuleRuntimeGuard.isCampaignRuleEligible(
+                        tenantId, rule.getCampaignUid(), request.getCustomerId(), campaignEvent, now
+                    )) {
+                        continue;
+                    }
+                }
                 boolean conditionOk = evaluateCondition(
                     tenantId, programmeUid, rule, eventMap, customerMap, tenantMap, now, progCtx
                 );
@@ -397,10 +418,14 @@ public class RuleEvaluationService {
             pts = pts.add(o.pointsAfterTier());
             catalogGrants.addAll(collectCatalogGrantsFromRule(tenantId, programmeUid, o.rule()));
             if (o.pointsAfterTier().compareTo(BigDecimal.ZERO) > 0) {
+                String sourceCampaignUid = RuleType.CAMPAIGN.name().equals(o.rule().getRuleType())
+                    ? o.rule().getCampaignUid()
+                    : null;
                 commands.add(RuleEvaluationResponse.RewardCommand.builder()
                     .commandId(UUID.randomUUID().toString())
                     .pointsToAward(o.pointsAfterTier())
                     .sourceRuleUid(o.rule().getRuleUid())
+                    .sourceCampaignUid(sourceCampaignUid)
                     .build());
             }
         }
@@ -589,6 +614,7 @@ public class RuleEvaluationService {
                 .commandId(UUID.randomUUID().toString())
                 .pointsToAward(p)
                 .sourceRuleUid(c.getSourceRuleUid())
+                .sourceCampaignUid(c.getSourceCampaignUid())
                 .build());
         }
         return finalizeCommands(scaled, tenantId, programmeUid, request);
@@ -613,18 +639,35 @@ public class RuleEvaluationService {
                 .actionType(ActionType.AWARD_POINTS.name())
                 .pointsToAward(c.getPointsToAward())
                 .sourceRuleUid(c.getSourceRuleUid())
+                .sourceCampaignUid(c.getSourceCampaignUid())
                 .timestamp(System.currentTimeMillis())
                 .build());
         }
         return out;
     }
 
-    private List<CachedRuleSnapshot> loadSnapshots(String tenantId, String programmeUid, String eventType, Instant now) {
+    private List<CachedRuleSnapshot> loadSnapshots(
+        String tenantId,
+        String programmeUid,
+        String eventType,
+        Instant now,
+        RuleEvaluateRequest request
+    ) {
+        String campaignUid = request.getCampaignUid();
+        if (campaignUid != null && !campaignUid.isBlank()) {
+            List<EarnRule> campaignRules = earnRuleRepository.findActiveCampaignRulesForEvaluation(
+                tenantId, programmeUid, campaignUid.trim(), eventType, RuleStatus.ACTIVE, now
+            );
+            return RuleCacheService.snapshotsFromEntities(campaignRules);
+        }
+
         Optional<List<CachedRuleSnapshot>> cached = ruleCacheService.get(tenantId, programmeUid, eventType);
         if (cached.isPresent()) {
-            return cached.get();
+            return cached.get().stream()
+                .filter(r -> r.getRuleType() == null || RuleType.PROGRAMME.name().equals(r.getRuleType()))
+                .toList();
         }
-        List<EarnRule> rules = earnRuleRepository.findActiveForEvaluation(
+        List<EarnRule> rules = earnRuleRepository.findActiveProgrammeRulesForEvaluation(
             tenantId, programmeUid, eventType, RuleStatus.ACTIVE, now
         );
         ruleCacheService.put(tenantId, programmeUid, eventType, rules);

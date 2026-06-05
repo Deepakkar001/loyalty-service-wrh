@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.loyaltyos.campaigns.enums.CampaignExecutionMode;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
 import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
@@ -64,6 +65,10 @@ public class Campaign {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private CampaignStatus status = CampaignStatus.DRAFT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "execution_mode", nullable = false, length = 32)
+    private CampaignExecutionMode executionMode = CampaignExecutionMode.RULE_GATED;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "target_segment", columnDefinition = "JSON")
@@ -159,6 +164,8 @@ public class Campaign {
     public void setOccasionTags(JsonNode occasionTags) { this.occasionTags = occasionTags; }
     public CampaignStatus getStatus() { return status; }
     public void setStatus(CampaignStatus status) { this.status = status; }
+    public CampaignExecutionMode getExecutionMode() { return executionMode; }
+    public void setExecutionMode(CampaignExecutionMode executionMode) { this.executionMode = executionMode; }
     public JsonNode getTargetSegment() { return targetSegment; }
     public void setTargetSegment(JsonNode targetSegment) { this.targetSegment = targetSegment; }
     public JsonNode getEligibilityRules() { return eligibilityRules; }

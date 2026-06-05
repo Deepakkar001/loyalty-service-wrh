@@ -10,6 +10,7 @@ import com.loyaltyos.campaigns.dto.LoyaltyEventProcessRequest;
 import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse;
 import com.loyaltyos.campaigns.entity.Campaign;
 import com.loyaltyos.campaigns.entity.CampaignParticipation;
+import com.loyaltyos.campaigns.enums.CampaignExecutionMode;
 import com.loyaltyos.campaigns.entity.CampaignResolutionLog;
 import com.loyaltyos.campaigns.enums.DropReason;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
@@ -22,6 +23,7 @@ import com.loyaltyos.campaigns.model.CampaignResolutionResult;
 import com.loyaltyos.campaigns.model.DroppedCampaign;
 import com.loyaltyos.campaigns.model.EligibilityResult;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
+import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.repository.CampaignResolutionLogRepository;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.rewards.config.RewardEngineProperties;
@@ -87,6 +89,7 @@ public class CampaignOrchestrationService {
     private final RewardEngineProperties rewardEngineProperties;
     private final CampaignJsonSupport jsonSupport;
     private final CampaignParticipationRepository participationRepository;
+    private final CampaignRepository campaignRepository;
     private final CampaignResolutionLogRepository resolutionLogRepository;
     private final VoucherAutoIssueService voucherAutoIssueService;
     private final ReferralEvaluationService referralEvaluationService;
@@ -109,6 +112,7 @@ public class CampaignOrchestrationService {
         RewardEngineProperties rewardEngineProperties,
         CampaignJsonSupport jsonSupport,
         CampaignParticipationRepository participationRepository,
+        CampaignRepository campaignRepository,
         CampaignResolutionLogRepository resolutionLogRepository,
         VoucherAutoIssueService voucherAutoIssueService,
         ReferralEvaluationService referralEvaluationService,
@@ -130,6 +134,7 @@ public class CampaignOrchestrationService {
         this.rewardEngineProperties = Objects.requireNonNull(rewardEngineProperties, "rewardEngineProperties");
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport");
         this.participationRepository = Objects.requireNonNull(participationRepository, "participationRepository");
+        this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.resolutionLogRepository = Objects.requireNonNull(resolutionLogRepository, "resolutionLogRepository");
         this.voucherAutoIssueService = Objects.requireNonNull(voucherAutoIssueService, "voucherAutoIssueService");
         this.referralEvaluationService = Objects.requireNonNull(referralEvaluationService, "referralEvaluationService");
@@ -206,6 +211,11 @@ public class CampaignOrchestrationService {
         validateEventPayload(tenantId, programmeUid, request);
 
         EvaluationScopeFlags scope = EvaluationScopeFlags.parse(request.getEvaluationScope());
+        String scopedCampaignUid = normalizeCampaignUid(request.getCampaignUid());
+        boolean ruleGatedRuntime = isRuleGatedCampaign(tenantId, scopedCampaignUid);
+        if (ruleGatedRuntime && scopedCampaignUid != null) {
+            scope = new EvaluationScopeFlags(scope.runCampaigns(), false, scope.runReferral());
+        }
 
         if (campaignProperties.isResolutionLogEnabled()) {
             Optional<CampaignResolutionLog> prior = resolutionLogRepository.findByTenantIdAndEventId(tenantId, eventId);
@@ -227,8 +237,7 @@ public class CampaignOrchestrationService {
         String resolutionMode = null;
         boolean campaignCapApplied = false;
 
-        if (scope.runCampaigns() && campaignProperties.isEnabled()) {
-            String scopedCampaignUid = normalizeCampaignUid(request.getCampaignUid());
+        if (scope.runCampaigns() && campaignProperties.isEnabled() && !ruleGatedRuntime) {
             EligibilityResult eligibility = scopedCampaignUid != null
                 ? eligibilityService.findQualifying(tenantId, programmeUid, eventContext, scopedCampaignUid)
                 : eligibilityService.findQualifying(tenantId, programmeUid, eventContext);
@@ -243,8 +252,11 @@ public class CampaignOrchestrationService {
         RuleEvaluationResponse ruleEval = new RuleEvaluationResponse();
         ruleEval.setSuccess(true);
         ruleEval.setFinalPointsAwarded(BigDecimal.ZERO);
-        if (scope.runProgrammeRules()) {
+        if (scope.runProgrammeRules() || ruleGatedRuntime) {
             RuleEvaluateRequest ruleReq = buildRuleEvaluateRequest(request, programmeUid, eventId);
+            if (ruleGatedRuntime && scopedCampaignUid != null) {
+                ruleReq.setCampaignUid(scopedCampaignUid);
+            }
             ruleEval = ruleEvaluationService.evaluate(tenantId, ruleReq);
         }
 
@@ -264,9 +276,9 @@ public class CampaignOrchestrationService {
         applying = filterStackableWithRules(applying, rulesMatched, rulePoints, allDropped);
 
         Instant defaultExpiry = defaultCreditExpiresAt();
-        List<CampaignBuiltAward> builtAwards = rewardCommandBuilder.build(
-            applying, eventContext, eventId, rulePoints, defaultExpiry
-        );
+        List<CampaignBuiltAward> builtAwards = ruleGatedRuntime
+            ? List.of()
+            : rewardCommandBuilder.build(applying, eventContext, eventId, rulePoints, defaultExpiry);
 
         CapClipResult capClip = clipCampaignPointsToProgrammeCaps(
             tenantId, programmeUid, customerId, builtAwards, progCtx, now
@@ -278,8 +290,18 @@ public class CampaignOrchestrationService {
 
         builtAwards = applyBudgetDecrement(tenantId, builtAwards, allDropped);
 
+        if (ruleGatedRuntime && scopedCampaignUid != null && rulePoints.signum() > 0) {
+            BudgetDecrementResult budget = budgetService.tryDecrementBudget(tenantId, scopedCampaignUid, rulePoints);
+            if (!budget.success()) {
+                allDropped.add(new DroppedCampaign(scopedCampaignUid, scopedCampaignUid, DropReason.BUDGET_EXHAUSTED));
+                rulePoints = BigDecimal.ZERO;
+                ruleEval.setFinalPointsAwarded(BigDecimal.ZERO);
+                ruleEval.setRewardCommands(List.of());
+            }
+        }
+
         List<RewardIssueCommandDto> issueCommands = new ArrayList<>();
-        if (scope.runProgrammeRules()) {
+        if (scope.runProgrammeRules() || ruleGatedRuntime) {
             for (RuleEvaluationResponse.RewardCommand rc : ruleEval.getRewardCommands()) {
                 issueCommands.add(toIssueCommand(rc));
             }
@@ -364,8 +386,12 @@ public class CampaignOrchestrationService {
             referralPointsToOtherCustomers = referralPointsToOtherCustomers.add(extraReferral);
         }
 
-        if (scope.runCampaigns()) {
-            persistParticipations(tenantId, programmeUid, customerId, eventId, builtAwards);
+        if (scope.runCampaigns() || ruleGatedRuntime) {
+            if (ruleGatedRuntime && scopedCampaignUid != null && rulePoints.signum() > 0) {
+                persistRuleGatedParticipation(tenantId, programmeUid, customerId, eventId, scopedCampaignUid, rulePoints);
+            } else {
+                persistParticipations(tenantId, programmeUid, customerId, eventId, builtAwards);
+            }
             persistResolutionLog(
                 tenantId,
                 programmeUid,
@@ -384,12 +410,14 @@ public class CampaignOrchestrationService {
         response.setSuccess(true);
         response.setMessage(issueResponse.getMessage());
         response.setIdempotentReplay(issueResponse.isIdempotentReplay());
-        response.setRulePointsAwarded(rulePoints);
-        response.setCampaignPointsAwarded(campaignPoints);
+        BigDecimal programmeRulePoints = ruleGatedRuntime ? BigDecimal.ZERO : rulePoints;
+        BigDecimal campaignAwarded = ruleGatedRuntime ? rulePoints : campaignPoints;
+        response.setRulePointsAwarded(programmeRulePoints);
+        response.setCampaignPointsAwarded(campaignAwarded);
         BigDecimal referralPointsTotal = referralPointsToEventCustomer.add(referralPointsToOtherCustomers);
         response.setReferralPointsAwarded(referralPointsTotal);
         response.setReferralPointsToOtherCustomers(referralPointsToOtherCustomers);
-        response.setTotalPointsAwarded(rulePoints.add(campaignPoints).add(referralPointsToEventCustomer));
+        response.setTotalPointsAwarded(programmeRulePoints.add(campaignAwarded).add(referralPointsToEventCustomer));
         response.setPreviousBalance(balanceBeforeIssue);
         response.setNewBalance(issueResponse.getNewBalance());
         if (!deferredReferralLines.isEmpty()) {
@@ -933,10 +961,39 @@ public class CampaignOrchestrationService {
         }
     }
 
+    private boolean isRuleGatedCampaign(String tenantId, String campaignUid) {
+        if (campaignUid == null || campaignUid.isBlank() || !campaignProperties.isEnabled()) {
+            return false;
+        }
+        return campaignRepository.findByTenantIdAndCampaignUid(tenantId, campaignUid.trim())
+            .map(c -> c.getExecutionMode() == CampaignExecutionMode.RULE_GATED)
+            .orElse(false);
+    }
+
+    private void persistRuleGatedParticipation(
+        String tenantId,
+        String programmeUid,
+        String customerId,
+        String eventId,
+        String campaignUid,
+        BigDecimal points
+    ) {
+        CampaignParticipation row = new CampaignParticipation();
+        row.setTenantId(tenantId);
+        row.setProgrammeUid(programmeUid);
+        row.setCampaignUid(campaignUid);
+        row.setCustomerId(customerId);
+        row.setEventId(eventId);
+        row.setPointsAwarded(points);
+        row.setCashbackAmount(BigDecimal.ZERO);
+        participationRepository.save(row);
+    }
+
     private static RewardIssueCommandDto toIssueCommand(RuleEvaluationResponse.RewardCommand rc) {
         RewardIssueCommandDto dto = new RewardIssueCommandDto();
         dto.setIdempotencyKey(rc.getIdempotencyKey());
         dto.setSourceRuleUid(rc.getSourceRuleUid());
+        dto.setSourceCampaignUid(rc.getSourceCampaignUid());
         dto.setPointsToAward(rc.getPointsToAward());
         dto.setActionType(rc.getActionType());
         dto.setCommandId(rc.getCommandId());

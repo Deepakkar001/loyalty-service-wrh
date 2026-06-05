@@ -57,7 +57,9 @@ class IntegrationServiceTest {
             new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
             mock(IntegrationCredentialCryptoService.class),
-            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class),
+            mock(com.loyaltyos.campaigns.service.CampaignRuleSandboxService.class),
+            mock(com.loyaltyos.campaigns.service.CampaignService.class)
         );
 
         assertThrows(InvalidStateException.class, () -> svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX));
@@ -101,7 +103,9 @@ class IntegrationServiceTest {
             new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
             crypto,
-            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class),
+            mock(com.loyaltyos.campaigns.service.CampaignRuleSandboxService.class),
+            mock(com.loyaltyos.campaigns.service.CampaignService.class)
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.SANDBOX);
@@ -147,7 +151,9 @@ class IntegrationServiceTest {
             new ObjectMapper(), mock(RuleEvaluationService.class),
             mock(SandboxTestEventRepository.class), mock(ProgrammeService.class),
             crypto,
-            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class)
+            mock(com.loyaltyos.integration.service.IntegrationEventPayloadResolver.class),
+            mock(com.loyaltyos.campaigns.service.CampaignRuleSandboxService.class),
+            mock(com.loyaltyos.campaigns.service.CampaignService.class)
         );
 
         var res = svc.generateKeys("t1", ApiKeyEnvironment.PRODUCTION);

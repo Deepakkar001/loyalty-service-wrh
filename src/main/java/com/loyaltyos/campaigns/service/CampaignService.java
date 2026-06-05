@@ -8,9 +8,11 @@ import com.loyaltyos.campaigns.dto.CampaignEventSchemaUpsertRequest;
 import com.loyaltyos.onboarding.service.EventSchemaJsonSupport;
 import com.loyaltyos.campaigns.config.CampaignProperties;
 import com.loyaltyos.campaigns.dto.CampaignResponse;
+import com.loyaltyos.campaigns.dto.CampaignSetupStatusResponse;
 import com.loyaltyos.campaigns.dto.CampaignStatsResponse;
 import com.loyaltyos.campaigns.dto.CampaignUpsertRequest;
 import com.loyaltyos.campaigns.entity.Campaign;
+import com.loyaltyos.campaigns.enums.CampaignExecutionMode;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
 import com.loyaltyos.campaigns.enums.CustomerScope;
 import com.loyaltyos.campaigns.enums.StackMode;
@@ -21,6 +23,10 @@ import com.loyaltyos.campaigns.model.CampaignOfferConfig;
 import com.loyaltyos.campaigns.model.CampaignTargetSegment;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
+import com.loyaltyos.rules.entity.EarnRule;
+import com.loyaltyos.rules.enums.RuleStatus;
+import com.loyaltyos.rules.enums.RuleType;
+import com.loyaltyos.rules.repository.EarnRuleRepository;
 import com.loyaltyos.campaigns.util.TriggerEventTypes;
 import com.loyaltyos.onboarding.service.ProgrammeService;
 import java.math.BigDecimal;
@@ -46,6 +52,8 @@ public class CampaignService {
     private final CampaignProperties campaignProperties;
     private final ObjectMapper objectMapper;
     private final ProgrammeService programmeService;
+    private final EarnRuleRepository earnRuleRepository;
+    private final CampaignRuleSandboxService campaignRuleSandboxService;
 
     public CampaignService(
         CampaignRepository campaignRepository,
@@ -53,7 +61,9 @@ public class CampaignService {
         CampaignProgrammeValidator programmeValidator,
         CampaignProperties campaignProperties,
         ObjectMapper objectMapper,
-        ProgrammeService programmeService
+        ProgrammeService programmeService,
+        EarnRuleRepository earnRuleRepository,
+        CampaignRuleSandboxService campaignRuleSandboxService
     ) {
         this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
         this.analyticsService = Objects.requireNonNull(analyticsService, "analyticsService");
@@ -61,6 +71,8 @@ public class CampaignService {
         this.campaignProperties = Objects.requireNonNull(campaignProperties, "campaignProperties");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
+        this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
+        this.campaignRuleSandboxService = Objects.requireNonNull(campaignRuleSandboxService, "campaignRuleSandboxService");
     }
 
     private void assertCampaignsEnabled() {
@@ -160,8 +172,86 @@ public class CampaignService {
                 );
             }
         }
+        assertRuleGatedActivationPreconditions(tenantId, c);
         c.setStatus(CampaignStatus.ACTIVE);
         return toResponse(campaignRepository.save(c), exceedsThreshold(c.getBudgetTotal()));
+    }
+
+    @Transactional(readOnly = true)
+    public CampaignSetupStatusResponse getSetupStatus(String tenantId, String campaignUid) {
+        assertCampaignsEnabled();
+        Campaign c = loadCampaign(tenantId, campaignUid);
+        List<EarnRule> campaignRules = earnRuleRepository.findByTenantIdAndCampaignUidAndRuleTypeOrderByPriorityDesc(
+            tenantId, campaignUid, RuleType.CAMPAIGN
+        );
+        EarnRule primaryRule = campaignRules.isEmpty() ? null : campaignRules.getFirst();
+        boolean ruleActive = primaryRule != null && primaryRule.getStatus() == RuleStatus.ACTIVE;
+        boolean sandboxPassed = primaryRule != null
+            && campaignRuleSandboxService.hasSandboxPass(tenantId, primaryRule.getRuleUid());
+
+        CampaignSetupStatusResponse status = new CampaignSetupStatusResponse();
+        status.setCampaignUid(campaignUid);
+        status.setCampaignStatus(c.getStatus());
+        status.setExecutionMode(c.getExecutionMode() != null ? c.getExecutionMode() : CampaignExecutionMode.RULE_GATED);
+        status.setCampaignSaved(c.getStatus() == CampaignStatus.DRAFT || c.getStatus() == CampaignStatus.PAUSED);
+        status.setCampaignRuleCreated(primaryRule != null);
+        status.setCampaignRuleUid(primaryRule != null ? primaryRule.getRuleUid() : null);
+        status.setCampaignRuleActive(ruleActive);
+        status.setSandboxPassed(sandboxPassed);
+        if (sandboxPassed && primaryRule != null) {
+            status.setSandboxPassedAt(
+                campaignRuleSandboxService.getSandboxStatus(tenantId, primaryRule.getRuleUid()).getPassedAt()
+            );
+        }
+
+        String blockReason = null;
+        boolean canActivate = c.getStatus() == CampaignStatus.DRAFT || c.getStatus() == CampaignStatus.PAUSED;
+        if (canActivate && status.getExecutionMode() == CampaignExecutionMode.RULE_GATED && campaignProperties.isRuleGatedOnly()) {
+            if (primaryRule == null) {
+                canActivate = false;
+                blockReason = "Create a CAMPAIGN earn rule for this campaign";
+            } else if (!ruleActive) {
+                canActivate = false;
+                blockReason = "Activate the CAMPAIGN earn rule after sandbox passes";
+            } else if (!sandboxPassed) {
+                canActivate = false;
+                blockReason = "Pass sandbox test for the CAMPAIGN earn rule";
+            }
+        }
+        status.setCanActivateCampaign(canActivate);
+        status.setActivateBlockReason(blockReason);
+        return status;
+    }
+
+    private void assertRuleGatedActivationPreconditions(String tenantId, Campaign c) {
+        if (c.getExecutionMode() != CampaignExecutionMode.RULE_GATED || !campaignProperties.isRuleGatedOnly()) {
+            return;
+        }
+        List<EarnRule> activeRules = earnRuleRepository.findByTenantIdAndCampaignUidAndRuleTypeAndStatus(
+            tenantId, c.getCampaignUid(), RuleType.CAMPAIGN, RuleStatus.ACTIVE
+        );
+        if (activeRules.isEmpty()) {
+            List<EarnRule> anyRules = earnRuleRepository.findByTenantIdAndCampaignUidAndRuleTypeOrderByPriorityDesc(
+                tenantId, c.getCampaignUid(), RuleType.CAMPAIGN
+            );
+            if (anyRules.isEmpty()) {
+                throw new CampaignConflictException(
+                    "CAMPAIGN_RULE_REQUIRED",
+                    "Create and activate a CAMPAIGN earn rule before activating this campaign"
+                );
+            }
+            throw new CampaignConflictException(
+                "CAMPAIGN_RULE_NOT_ACTIVE",
+                "Activate the CAMPAIGN earn rule before activating this campaign"
+            );
+        }
+        EarnRule rule = activeRules.getFirst();
+        if (!campaignRuleSandboxService.hasSandboxPass(tenantId, rule.getRuleUid())) {
+            throw new CampaignConflictException(
+                "SANDBOX_REQUIRED",
+                "Pass sandbox test for the CAMPAIGN earn rule before activating this campaign"
+            );
+        }
     }
 
     @Transactional
@@ -246,6 +336,7 @@ public class CampaignService {
         c.setProgrammeUid(programmeUid);
         c.setCampaignUid(campaignUid);
         c.setStatus(CampaignStatus.DRAFT);
+        c.setExecutionMode(CampaignExecutionMode.RULE_GATED);
         c.setBudgetConsumed(BigDecimal.ZERO);
         applyUpsert(c, req, actorId);
         return c;
@@ -385,6 +476,7 @@ public class CampaignService {
         r.setBudgetExceedsApprovalThreshold(exceedsThreshold);
         r.setCustomerScope(c.getCustomerScope() != null ? c.getCustomerScope() : CustomerScope.ALL);
         r.setCustomerCount(c.getCustomerCount() != null ? c.getCustomerCount() : 0);
+        r.setExecutionMode(c.getExecutionMode() != null ? c.getExecutionMode() : CampaignExecutionMode.RULE_GATED);
         return r;
     }
 

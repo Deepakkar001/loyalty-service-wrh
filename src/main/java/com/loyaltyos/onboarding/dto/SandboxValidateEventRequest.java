@@ -16,6 +16,9 @@ public class SandboxValidateEventRequest {
      */
     private String ruleUid;
 
+    /** Optional explicit campaign; otherwise derived from CAMPAIGN rule when ruleUid is set. */
+    private String campaignUid;
+
     public SandboxValidateEventRequest() {}
 
     public String getPayloadJson() {
@@ -32,6 +35,14 @@ public class SandboxValidateEventRequest {
 
     public void setRuleUid(String ruleUid) {
         this.ruleUid = ruleUid;
+    }
+
+    public String getCampaignUid() {
+        return campaignUid;
+    }
+
+    public void setCampaignUid(String campaignUid) {
+        this.campaignUid = campaignUid;
     }
 }
 
