@@ -108,7 +108,7 @@ loyalty:
     default-credit-expiry-months: ${LOYALTY_REWARDS_DEFAULT_CREDIT_EXPIRY_MONTHS:24}
   campaigns:
     enabled: ${LOYALTY_CAMPAIGNS_ENABLED:true}
-    approval-budget-threshold: ${LOYALTY_CAMPAIGNS_APPROVAL_BUDGET_THRESHOLD:100000}
+    rule-gated-only: ${LOYALTY_CAMPAIGNS_RULE_GATED_ONLY:true}
     default-alert-threshold-pct: ${LOYALTY_CAMPAIGNS_DEFAULT_ALERT_THRESHOLD_PCT:80}
     resolution-log-enabled: ${LOYALTY_CAMPAIGNS_RESOLUTION_LOG_ENABLED:true}
     budget-alert-webhook-enabled: ${LOYALTY_CAMPAIGNS_BUDGET_ALERT_WEBHOOK_ENABLED:true}
@@ -130,6 +130,8 @@ loyaltyos:
     low-stock-threshold: ${LOYALTYOS_VOUCHER_LOW_STOCK_THRESHOLD:100}
     expiry-job-enabled: ${LOYALTYOS_VOUCHER_EXPIRY_JOB_ENABLED:true}
     expiry-cron: ${LOYALTYOS_VOUCHER_EXPIRY_CRON:0 0 2 * * *}
+    auto-issue-from-rules:
+      enabled: ${LOYALTYOS_VOUCHER_AUTO_ISSUE_FROM_RULES_ENABLED:true}
   integration:
     encryption-key: ${INTEGRATION_ENCRYPTION_KEY:}
     rate-limit:
