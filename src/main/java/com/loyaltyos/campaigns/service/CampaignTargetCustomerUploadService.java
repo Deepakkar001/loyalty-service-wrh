@@ -221,7 +221,9 @@ public class CampaignTargetCustomerUploadService {
             );
             refreshCustomerCount(campaign);
             campaignRepository.save(campaign);
-            return toUploadResponse(existingUpload.get(), null);
+            CampaignTargetUploadResponse replay = toUploadResponse(existingUpload.get(), null);
+            replay.setDuplicateFileReplay(true);
+            return replay;
         }
 
         String uploadUid = UUID.randomUUID().toString();
@@ -495,6 +497,8 @@ public class CampaignTargetCustomerUploadService {
         response.setImportedCount(batch.getImportedCount());
         response.setDuplicateCount(batch.getDuplicateCount());
         response.setErrorCount(batch.getErrorCount());
+        response.setTenantId(batch.getTenantId());
+        response.setUploadedBy(batch.getTenantId());
         response.setUploadedAt(batch.getUploadedAt());
         response.setCompletedAt(batch.getCompletedAt());
         if (errors != null) {

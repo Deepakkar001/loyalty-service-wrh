@@ -13,9 +13,15 @@ public class CampaignTargetUploadResponse {
     private Integer duplicateCount;
     private Integer errorCount;
     private List<Map<String, Object>> errorReport;
+    /** Tenant that owns this upload (DB tenant_id). */
+    private String tenantId;
+    /** Same as tenantId — exposed for UI column "Uploaded by". */
+    private String uploadedBy;
     private Instant uploadedAt;
     private Instant completedAt;
     private String errorMessage;
+    /** True when the same file (SHA-256) was already uploaded for this campaign. */
+    private boolean duplicateFileReplay;
 
     public String getUploadUid() { return uploadUid; }
     public void setUploadUid(String uploadUid) { this.uploadUid = uploadUid; }
@@ -31,10 +37,16 @@ public class CampaignTargetUploadResponse {
     public void setErrorCount(Integer errorCount) { this.errorCount = errorCount; }
     public List<Map<String, Object>> getErrorReport() { return errorReport; }
     public void setErrorReport(List<Map<String, Object>> errorReport) { this.errorReport = errorReport; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getUploadedBy() { return uploadedBy; }
+    public void setUploadedBy(String uploadedBy) { this.uploadedBy = uploadedBy; }
     public Instant getUploadedAt() { return uploadedAt; }
     public void setUploadedAt(Instant uploadedAt) { this.uploadedAt = uploadedAt; }
     public Instant getCompletedAt() { return completedAt; }
     public void setCompletedAt(Instant completedAt) { this.completedAt = completedAt; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public boolean isDuplicateFileReplay() { return duplicateFileReplay; }
+    public void setDuplicateFileReplay(boolean duplicateFileReplay) { this.duplicateFileReplay = duplicateFileReplay; }
 }

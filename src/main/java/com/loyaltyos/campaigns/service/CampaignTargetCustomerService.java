@@ -104,6 +104,8 @@ public class CampaignTargetCustomerService {
             row.setImportedCount(u.getImportedCount());
             row.setDuplicateCount(u.getDuplicateCount());
             row.setErrorCount(u.getErrorCount());
+            row.setTenantId(u.getTenantId());
+            row.setUploadedBy(u.getTenantId());
             row.setUploadedAt(u.getUploadedAt());
             row.setCompletedAt(u.getCompletedAt());
             out.add(row);

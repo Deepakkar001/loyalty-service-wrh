@@ -29,8 +29,6 @@ public class CampaignProperties {
 
     private boolean enabled = true;
 
-    private BigDecimal approvalBudgetThreshold = new BigDecimal("100000");
-
     private BigDecimal defaultAlertThresholdPct = new BigDecimal("80");
 
     private boolean resolutionLogEnabled = true;
@@ -65,22 +63,6 @@ public class CampaignProperties {
     public void setEnabled(boolean enabled) {
 
         this.enabled = enabled;
-
-    }
-
-
-
-    public BigDecimal getApprovalBudgetThreshold() {
-
-        return approvalBudgetThreshold;
-
-    }
-
-
-
-    public void setApprovalBudgetThreshold(BigDecimal approvalBudgetThreshold) {
-
-        this.approvalBudgetThreshold = approvalBudgetThreshold;
 
     }
 

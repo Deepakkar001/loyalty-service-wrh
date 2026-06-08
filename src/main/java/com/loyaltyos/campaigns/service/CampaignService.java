@@ -97,9 +97,8 @@ public class CampaignService {
         }
 
         Campaign entity = mapNewEntity(tenantId, programmeUid, campaignUid, req, actorId);
-        warnIfBudgetExceedsThreshold(tenantId, entity.getBudgetTotal());
         Campaign saved = campaignRepository.save(entity);
-        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -116,15 +115,14 @@ public class CampaignService {
         validateUpsert(tenantId, programmeUid, req);
 
         applyUpsert(existing, req, actorId);
-        warnIfBudgetExceedsThreshold(tenantId, existing.getBudgetTotal());
         Campaign saved = campaignRepository.save(existing);
-        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
     public CampaignResponse get(String tenantId, String campaignUid) {
         Campaign c = loadCampaign(tenantId, campaignUid);
-        return toResponse(c, exceedsThreshold(c.getBudgetTotal()));
+        return toResponse(c);
     }
 
     @Transactional(readOnly = true)
@@ -145,7 +143,7 @@ public class CampaignService {
             .toList();
         List<CampaignResponse> out = new ArrayList<>();
         for (Campaign c : rows) {
-            out.add(toResponse(c, exceedsThreshold(c.getBudgetTotal())));
+            out.add(toResponse(c));
         }
         return out;
     }
@@ -174,7 +172,7 @@ public class CampaignService {
         }
         assertRuleGatedActivationPreconditions(tenantId, c);
         c.setStatus(CampaignStatus.ACTIVE);
-        return toResponse(campaignRepository.save(c), exceedsThreshold(c.getBudgetTotal()));
+        return toResponse(campaignRepository.save(c));
     }
 
     @Transactional(readOnly = true)
@@ -262,7 +260,7 @@ public class CampaignService {
             throw new CampaignConflictException("Only ACTIVE campaigns can be paused");
         }
         c.setStatus(CampaignStatus.PAUSED);
-        return toResponse(campaignRepository.save(c), exceedsThreshold(c.getBudgetTotal()));
+        return toResponse(campaignRepository.save(c));
     }
 
     @Transactional
@@ -273,7 +271,7 @@ public class CampaignService {
             throw new CampaignConflictException("Campaign is already terminal: " + c.getStatus());
         }
         c.setStatus(CampaignStatus.ENDED);
-        return toResponse(campaignRepository.save(c), exceedsThreshold(c.getBudgetTotal()));
+        return toResponse(campaignRepository.save(c));
     }
 
     @Transactional(readOnly = true)
@@ -312,7 +310,7 @@ public class CampaignService {
         c.setTriggerEventType(triggerTypes);
         programmeValidator.validateTriggerEventType(tenantId, c.getProgrammeUid(), triggerTypes);
         Campaign saved = campaignRepository.save(c);
-        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
+        return toResponse(saved);
     }
 
     private Campaign loadCampaign(String tenantId, String campaignUid) {
@@ -426,22 +424,7 @@ public class CampaignService {
         return s == null || s.isBlank() ? null : s.trim();
     }
 
-    private void warnIfBudgetExceedsThreshold(String tenantId, BigDecimal budgetTotal) {
-        if (budgetTotal != null && budgetTotal.compareTo(campaignProperties.getApprovalBudgetThreshold()) > 0) {
-            log.warn(
-                "Campaign budget_total {} exceeds approval threshold {} for tenant {}",
-                budgetTotal,
-                campaignProperties.getApprovalBudgetThreshold(),
-                tenantId
-            );
-        }
-    }
-
-    private boolean exceedsThreshold(BigDecimal budgetTotal) {
-        return budgetTotal != null && budgetTotal.compareTo(campaignProperties.getApprovalBudgetThreshold()) > 0;
-    }
-
-    private CampaignResponse toResponse(Campaign c, boolean exceedsThreshold) {
+    private CampaignResponse toResponse(Campaign c) {
         CampaignResponse r = new CampaignResponse();
         r.setTenantId(c.getTenantId());
         r.setProgrammeUid(c.getProgrammeUid());
@@ -473,7 +456,6 @@ public class CampaignService {
         r.setCreatedBy(c.getCreatedBy());
         r.setCreatedAt(c.getCreatedAt());
         r.setUpdatedAt(c.getUpdatedAt());
-        r.setBudgetExceedsApprovalThreshold(exceedsThreshold);
         r.setCustomerScope(c.getCustomerScope() != null ? c.getCustomerScope() : CustomerScope.ALL);
         r.setCustomerCount(c.getCustomerCount() != null ? c.getCustomerCount() : 0);
         r.setExecutionMode(c.getExecutionMode() != null ? c.getExecutionMode() : CampaignExecutionMode.RULE_GATED);
