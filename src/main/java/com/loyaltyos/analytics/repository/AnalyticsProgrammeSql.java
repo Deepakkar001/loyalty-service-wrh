@@ -52,4 +52,15 @@ final class AnalyticsProgrammeSql {
     static String programmeColumnEqualsColumn(String leftQualified, String rightQualified) {
         return collate(leftQualified) + " = " + collate(rightQualified);
     }
+
+    /** Use in UNION branches when {@code customer_id} collations differ across tables. */
+    static String collateColumn(String qualifiedColumn) {
+        return collate(qualifiedColumn);
+    }
+
+    static String tierNameEqualsParam(String qualifiedColumn) {
+        return collate(qualifiedColumn)
+            + " = CAST(:tierName AS CHAR(128) CHARACTER SET utf8mb4) COLLATE "
+            + COLLATE;
+    }
 }

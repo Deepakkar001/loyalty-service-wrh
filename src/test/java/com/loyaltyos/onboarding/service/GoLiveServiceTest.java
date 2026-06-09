@@ -16,7 +16,6 @@ import com.loyaltyos.onboarding.repository.TenantApiKeyRepository;
 import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
-import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +35,6 @@ class GoLiveServiceTest {
         var cfgRepo = mock(TenantConfigRepository.class);
         var tierRepo = mock(TierDefinitionRepository.class);
         var keyRepo = mock(TenantApiKeyRepository.class);
-        var webhookRepo = mock(WebhookSubscriptionRepository.class);
         var auditRepo = mock(OnboardingAuditLogRepository.class);
         var stateMachine = mock(OnboardingStateMachine.class);
         // KafkaTemplate kafka = mock(KafkaTemplate.class); // when Kafka re-enabled
@@ -63,10 +61,8 @@ class GoLiveServiceTest {
         when(tierRepo.countByTenantId("t1")).thenReturn(1L);
         when(keyRepo.findByTenantIdAndEnvironmentAndStatus("t1", ApiKeyEnvironment.PRODUCTION, ApiKeyStatus.ACTIVE))
             .thenReturn(List.of(new com.loyaltyos.onboarding.entity.TenantApiKey()));
-        when(webhookRepo.countByTenantIdAndActiveTrue("t1")).thenReturn(0L);
-
         GoLiveService svc = new GoLiveService(
-            tenantRepo, agreementRepo, cfgRepo, tierRepo, keyRepo, webhookRepo, auditRepo, stateMachine
+            tenantRepo, agreementRepo, cfgRepo, tierRepo, keyRepo, auditRepo, stateMachine
         );
 
         var checklist = svc.getChecklist("t1");
@@ -80,7 +76,6 @@ class GoLiveServiceTest {
         var cfgRepo = mock(TenantConfigRepository.class);
         var tierRepo = mock(TierDefinitionRepository.class);
         var keyRepo = mock(TenantApiKeyRepository.class);
-        var webhookRepo = mock(WebhookSubscriptionRepository.class);
         var auditRepo = mock(OnboardingAuditLogRepository.class);
         var stateMachine = mock(OnboardingStateMachine.class);
         // KafkaTemplate kafka = mock(KafkaTemplate.class); // when Kafka re-enabled
@@ -111,7 +106,7 @@ class GoLiveServiceTest {
         when(cfgRepo.findByTenantId("t1")).thenReturn(Optional.of(TenantConfig.builder().tenantId("t1").displayName("Acme").build()));
 
         GoLiveService svc = new GoLiveService(
-            tenantRepo, agreementRepo, cfgRepo, tierRepo, keyRepo, webhookRepo, auditRepo, stateMachine
+            tenantRepo, agreementRepo, cfgRepo, tierRepo, keyRepo, auditRepo, stateMachine
         );
 
         assertThrows(InvalidStateException.class, () -> svc.activate("t1"));

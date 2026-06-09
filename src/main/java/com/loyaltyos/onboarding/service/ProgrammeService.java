@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.entity.Programme;
+import com.loyaltyos.onboarding.dto.EventDefinitionRequest;
+import com.loyaltyos.onboarding.dto.EventSchemaSettingsPatchRequest;
+import com.loyaltyos.onboarding.dto.RewardCatalogRecoveryResponse;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 // import com.loyaltyos.onboarding.event.ProgrammeConfigUpdatedEvent; // with Kafka publish
 import com.loyaltyos.onboarding.enums.OnboardingStatus;
@@ -34,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -273,6 +277,8 @@ public class ProgrammeService {
             }
         });
 
+        maybeActivateProgrammeDuringGuidedSetup(p, tenantId, programmeUid, actorId, actorRole);
+
         // --- Kafka publish (disabled) — topic platform.config.updates ---
         // ProgrammeConfigUpdatedEvent event = ProgrammeConfigUpdatedEvent.builder()
         //     .tenantId(tenantId)
@@ -286,6 +292,91 @@ public class ProgrammeService {
         // kafkaTemplate.send("platform.config.updates", tenantId, event);
 
         return saved;
+    }
+
+    @Transactional
+    public ProgrammeConfig patchEventDefinition(
+        String tenantId,
+        String programmeUid,
+        String pathEventType,
+        EventDefinitionRequest body,
+        String actorId,
+        String actorRole
+    ) {
+        ObjectNode root = loadMutableConfigRoot(tenantId, programmeUid);
+        ObjectNode eventSchema = eventSchemaObject(root);
+        ObjectNode definition = EventSchemaJsonSupport.toEventDefinitionNode(body);
+        EventSchemaJsonSupport.replaceEventDefinition(eventSchema, pathEventType, definition);
+        return saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+    }
+
+    @Transactional
+    public ProgrammeConfig addEventDefinition(
+        String tenantId,
+        String programmeUid,
+        EventDefinitionRequest body,
+        String actorId,
+        String actorRole
+    ) {
+        ObjectNode root = loadMutableConfigRoot(tenantId, programmeUid);
+        ObjectNode eventSchema = eventSchemaObject(root);
+        ObjectNode definition = EventSchemaJsonSupport.toEventDefinitionNode(body);
+        EventSchemaJsonSupport.addEventDefinition(eventSchema, definition);
+        return saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+    }
+
+    @Transactional
+    public ProgrammeConfig removeEventDefinition(
+        String tenantId,
+        String programmeUid,
+        String pathEventType,
+        String actorId,
+        String actorRole
+    ) {
+        ObjectNode root = loadMutableConfigRoot(tenantId, programmeUid);
+        ObjectNode eventSchema = eventSchemaObject(root);
+        EventSchemaJsonSupport.removeEventDefinition(eventSchema, pathEventType);
+        return saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+    }
+
+    @Transactional
+    public ProgrammeConfig patchEventSchemaSettings(
+        String tenantId,
+        String programmeUid,
+        EventSchemaSettingsPatchRequest body,
+        String actorId,
+        String actorRole
+    ) {
+        ObjectNode root = loadMutableConfigRoot(tenantId, programmeUid);
+        ObjectNode eventSchema = eventSchemaObject(root);
+        EventSchemaJsonSupport.applySettingsPatch(eventSchema, body);
+        return saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+    }
+
+    private ObjectNode loadMutableConfigRoot(String tenantId, String programmeUid) {
+        ProgrammeConfig active = getActiveConfigOrNull(tenantId, programmeUid);
+        if (active == null || active.getConfigJson() == null || active.getConfigJson().isBlank()) {
+            throw new IllegalArgumentException("Save a full programme configuration before editing event schema.");
+        }
+        try {
+            JsonNode parsed = objectMapper.readTree(active.getConfigJson());
+            if (!parsed.isObject()) {
+                throw new IllegalArgumentException("Invalid programme configuration");
+            }
+            return (ObjectNode) parsed;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to parse programme config", e);
+        }
+    }
+
+    private static ObjectNode eventSchemaObject(ObjectNode configRoot) {
+        JsonNode es = configRoot.path("eventSchema");
+        if (es.isObject()) {
+            return (ObjectNode) es;
+        }
+        return configRoot.putObject("eventSchema");
     }
 
     /**
@@ -492,12 +583,204 @@ public class ProgrammeService {
 
     private record CascadeArchiveResult(int rulesArchived, int campaignsEnded) {}
 
+    /**
+     * During guided onboarding (tenant not yet go-live ACTIVE), tenants cannot reach My Configurations
+     * to manually activate programmes. Auto-activate after a successful config save so sandbox/integration
+     * can proceed. Post go-live tenants manage programme status themselves.
+     */
+    private void maybeActivateProgrammeDuringGuidedSetup(
+        Programme programme,
+        String tenantId,
+        String programmeUid,
+        String actorId,
+        String actorRole
+    ) {
+        tenantOnboardingRepository.findByTenantId(tenantId).ifPresent(tenant -> {
+            if (!isGuidedSetupInProgress(tenant.getOnboardingStatus())) {
+                return;
+            }
+            if (programme.getStatus() == ProgrammeStatus.ACTIVE
+                || programme.getStatus() == ProgrammeStatus.ARCHIVED) {
+                return;
+            }
+            ProgrammeStatus before = programme.getStatus();
+            programme.setStatus(ProgrammeStatus.ACTIVE);
+            programme.setUpdatedAt(Instant.now());
+            programmeRepository.save(programme);
+            ruleCacheService.invalidateProgramme(tenantId, programmeUid);
+
+            OnboardingAuditLog audit = OnboardingAuditLog.builder()
+                .tenantId(tenantId)
+                .action("PROGRAMME_AUTO_ACTIVATED_SETUP")
+                .actorId(actorId)
+                .actorRole(actorRole)
+                .beforeState(Map.of("programmeUid", programmeUid, "status", String.valueOf(before)))
+                .afterState(Map.of("programmeUid", programmeUid, "status", String.valueOf(ProgrammeStatus.ACTIVE)))
+                .build();
+            auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
+        });
+    }
+
+    private static boolean isGuidedSetupInProgress(OnboardingStatus status) {
+        if (status == null) {
+            return false;
+        }
+        return status != OnboardingStatus.ACTIVE
+            && status != OnboardingStatus.SUSPENDED
+            && status != OnboardingStatus.TERMINATED;
+    }
+
     private void assertProgrammeEditable(Programme programme) {
         if (programme.getStatus() == Programme.ProgrammeStatus.ARCHIVED) {
             throw new IllegalStateException(
                 "Programme is archived and cannot be modified. Create a new programme instead."
             );
         }
+    }
+
+    @Transactional(readOnly = true)
+    public RewardCatalogRecoveryResponse previewRewardCatalogRecovery(String tenantId, String programmeUid) {
+        programmeRepository.findByTenantIdAndProgrammeUid(tenantId, programmeUid)
+            .orElseThrow(() -> new IllegalArgumentException("Programme not found"));
+
+        ProgrammeConfig current = getActiveConfigOrNull(tenantId, programmeUid);
+        int currentCount = countRewardCatalogItems(current);
+        if (currentCount > 0) {
+            return RewardCatalogRecoveryResponse.builder()
+                .recoverable(false)
+                .itemCount(currentCount)
+                .message("Current configuration already has catalog items.")
+                .build();
+        }
+
+        Optional<ProgrammeConfig> source = findLatestConfigWithRewardCatalog(tenantId, programmeUid, current);
+        if (source.isEmpty()) {
+            return RewardCatalogRecoveryResponse.builder()
+                .recoverable(false)
+                .message("No previous reward catalog found in configuration history.")
+                .build();
+        }
+
+        ProgrammeConfig row = source.get();
+        JsonNode catalog = readRewardCatalogNode(row);
+        int itemCount = countRewardCatalogItems(row);
+        int voucherCount = countVoucherCatalogItems(catalog);
+        return RewardCatalogRecoveryResponse.builder()
+            .recoverable(true)
+            .sourceConfigVersion(row.getConfigVersion())
+            .itemCount(itemCount)
+            .voucherItemCount(voucherCount)
+            .message("Recover " + itemCount + " catalog item(s) from config version " + row.getConfigVersion() + ".")
+            .build();
+    }
+
+    @Transactional
+    public ProgrammeConfig restoreRewardCatalogFromHistory(
+        String tenantId,
+        String programmeUid,
+        String actorId,
+        String actorRole
+    ) {
+        RewardCatalogRecoveryResponse preview = previewRewardCatalogRecovery(tenantId, programmeUid);
+        if (!preview.isRecoverable() || preview.getSourceConfigVersion() == null) {
+            throw new IllegalArgumentException(
+                preview.getMessage() != null ? preview.getMessage() : "No recoverable reward catalog found"
+            );
+        }
+
+        ProgrammeConfig source = programmeConfigRepository
+            .findByTenantIdAndProgrammeUidAndConfigVersion(tenantId, programmeUid, preview.getSourceConfigVersion())
+            .orElseThrow(() -> new IllegalStateException("Source configuration version no longer available"));
+
+        JsonNode sourceCatalog = readRewardCatalogNode(source);
+        if (sourceCatalog == null || sourceCatalog.isMissingNode() || sourceCatalog.isNull()) {
+            throw new IllegalStateException("Source configuration has no reward catalog");
+        }
+
+        ObjectNode root = loadMutableConfigRootOrEmpty(tenantId, programmeUid);
+        root.set("rewardCatalog", sourceCatalog.deepCopy());
+        return saveConfig(tenantId, programmeUid, root, actorId, actorRole);
+    }
+
+    private Optional<ProgrammeConfig> findLatestConfigWithRewardCatalog(
+        String tenantId,
+        String programmeUid,
+        ProgrammeConfig current
+    ) {
+        Integer currentVersion = current == null ? null : current.getConfigVersion();
+        List<ProgrammeConfig> history =
+            programmeConfigRepository.findByTenantIdAndProgrammeUidOrderByConfigVersionDesc(tenantId, programmeUid);
+        for (ProgrammeConfig row : history) {
+            if (currentVersion != null && Objects.equals(currentVersion, row.getConfigVersion())) {
+                continue;
+            }
+            if (countRewardCatalogItems(row) > 0) {
+                return Optional.of(row);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private ObjectNode loadMutableConfigRootOrEmpty(String tenantId, String programmeUid) {
+        ProgrammeConfig active = getActiveConfigOrNull(tenantId, programmeUid);
+        if (active == null || active.getConfigJson() == null || active.getConfigJson().isBlank()) {
+            return objectMapper.createObjectNode();
+        }
+        try {
+            JsonNode parsed = objectMapper.readTree(active.getConfigJson());
+            if (!parsed.isObject()) {
+                return objectMapper.createObjectNode();
+            }
+            return (ObjectNode) parsed;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to parse programme config", e);
+        }
+    }
+
+    private JsonNode readRewardCatalogNode(ProgrammeConfig cfg) {
+        if (cfg == null || cfg.getConfigJson() == null || cfg.getConfigJson().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(cfg.getConfigJson()).path("rewardCatalog");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private int countRewardCatalogItems(ProgrammeConfig cfg) {
+        JsonNode catalog = readRewardCatalogNode(cfg);
+        if (catalog == null || catalog.isMissingNode() || catalog.isNull()) {
+            return 0;
+        }
+        JsonNode items = catalog.path("items");
+        if (!items.isArray()) {
+            return 0;
+        }
+        int count = 0;
+        for (JsonNode item : items) {
+            if (!item.path("rewardUid").asText("").trim().isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countVoucherCatalogItems(JsonNode catalog) {
+        if (catalog == null || catalog.isMissingNode() || catalog.isNull()) {
+            return 0;
+        }
+        JsonNode items = catalog.path("items");
+        if (!items.isArray()) {
+            return 0;
+        }
+        int count = 0;
+        for (JsonNode item : items) {
+            if ("VOUCHER".equalsIgnoreCase(item.path("rewardType").asText("").trim())) {
+                count++;
+            }
+        }
+        return count;
     }
 }
 

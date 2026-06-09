@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.loyaltyos.campaigns.dto.CampaignEventSchemaUpsertRequest;
+import com.loyaltyos.onboarding.dto.EventDefinitionRequest;
+import com.loyaltyos.onboarding.dto.EventSchemaSettingsPatchRequest;
 import com.loyaltyos.onboarding.service.EventSchemaJsonSupport;
 import com.loyaltyos.campaigns.config.CampaignProperties;
 import com.loyaltyos.campaigns.dto.CampaignResponse;
@@ -311,6 +313,97 @@ public class CampaignService {
         programmeValidator.validateTriggerEventType(tenantId, c.getProgrammeUid(), triggerTypes);
         Campaign saved = campaignRepository.save(c);
         return toResponse(saved);
+    }
+
+    @Transactional
+    public CampaignResponse patchEventDefinition(
+        String tenantId,
+        String campaignUid,
+        String pathEventType,
+        EventDefinitionRequest body
+    ) {
+        assertCampaignsEnabled();
+        Campaign c = loadEditableCampaign(tenantId, campaignUid);
+        ObjectNode schema = mutableEventSchema(c);
+        ObjectNode definition = EventSchemaJsonSupport.toEventDefinitionNode(body);
+        try {
+            EventSchemaJsonSupport.replaceEventDefinition(schema, pathEventType, definition);
+        } catch (IllegalArgumentException e) {
+            throw new CampaignBadRequestException(e.getMessage());
+        }
+        return persistEventSchemaDocument(c, schema);
+    }
+
+    @Transactional
+    public CampaignResponse addEventDefinition(String tenantId, String campaignUid, EventDefinitionRequest body) {
+        assertCampaignsEnabled();
+        Campaign c = loadEditableCampaign(tenantId, campaignUid);
+        ObjectNode schema = mutableEventSchema(c);
+        ObjectNode definition = EventSchemaJsonSupport.toEventDefinitionNode(body);
+        try {
+            EventSchemaJsonSupport.addEventDefinition(schema, definition);
+        } catch (IllegalArgumentException e) {
+            throw new CampaignBadRequestException(e.getMessage());
+        }
+        return persistEventSchemaDocument(c, schema);
+    }
+
+    @Transactional
+    public CampaignResponse removeEventDefinition(String tenantId, String campaignUid, String pathEventType) {
+        assertCampaignsEnabled();
+        Campaign c = loadEditableCampaign(tenantId, campaignUid);
+        ObjectNode schema = mutableEventSchema(c);
+        try {
+            EventSchemaJsonSupport.removeEventDefinition(schema, pathEventType);
+        } catch (IllegalArgumentException e) {
+            throw new CampaignBadRequestException(e.getMessage());
+        }
+        return persistEventSchemaDocument(c, schema);
+    }
+
+    @Transactional
+    public CampaignResponse patchEventSchemaSettings(
+        String tenantId,
+        String campaignUid,
+        EventSchemaSettingsPatchRequest body
+    ) {
+        assertCampaignsEnabled();
+        Campaign c = loadEditableCampaign(tenantId, campaignUid);
+        ObjectNode schema = mutableEventSchema(c);
+        try {
+            EventSchemaJsonSupport.applySettingsPatch(schema, body);
+        } catch (IllegalArgumentException e) {
+            throw new CampaignBadRequestException(e.getMessage());
+        }
+        return persistEventSchemaDocument(c, schema);
+    }
+
+    private Campaign loadEditableCampaign(String tenantId, String campaignUid) {
+        Campaign c = loadCampaign(tenantId, campaignUid);
+        if (isTerminalStatus(c.getStatus())) {
+            throw new CampaignConflictException("Cannot update event schema for campaign in status " + c.getStatus());
+        }
+        return c;
+    }
+
+    private ObjectNode mutableEventSchema(Campaign c) {
+        JsonNode existing = c.getEventSchema();
+        if (existing != null && existing.isObject()) {
+            return existing.deepCopy();
+        }
+        return objectMapper.createObjectNode();
+    }
+
+    private CampaignResponse persistEventSchemaDocument(Campaign c, ObjectNode schema) {
+        c.setEventSchema(schema);
+        String triggerTypes = EventSchemaJsonSupport.triggerTypesFromEventSchema(schema);
+        if (triggerTypes.isBlank()) {
+            throw new CampaignBadRequestException("At least one event type is required in eventSchema");
+        }
+        c.setTriggerEventType(triggerTypes);
+        programmeValidator.validateTriggerEventType(c.getTenantId(), c.getProgrammeUid(), triggerTypes);
+        Campaign saved = campaignRepository.save(c);
+        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
     }
 
     private Campaign loadCampaign(String tenantId, String campaignUid) {

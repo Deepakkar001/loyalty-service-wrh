@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.onboarding.entity.Programme;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.entity.TenantOnboarding;
+import com.loyaltyos.onboarding.enums.OnboardingStatus;
 import com.loyaltyos.onboarding.exception.ProgrammeArchiveBlockedException;
 import com.loyaltyos.onboarding.exception.ProgrammeInactiveException;
 import com.loyaltyos.onboarding.repository.OnboardingAuditLogRepository;
@@ -311,6 +312,125 @@ class ProgrammeServiceTest {
         Programme updated = svc.updateProgrammeStatus("t1", "p1", Programme.ProgrammeStatus.ACTIVE, "t1", "TENANT");
         assertEquals(Programme.ProgrammeStatus.ACTIVE, updated.getStatus());
         verify(ruleCache).invalidateProgramme("t1", "p1");
+    }
+
+    @Test
+    void saveConfig_duringGuidedSetup_autoActivatesDraftProgramme() throws Exception {
+        var programmeRepo = mock(ProgrammeRepository.class);
+        var programmeConfigRepo = mock(ProgrammeConfigRepository.class);
+        var tenantOnboardingRepo = mock(TenantOnboardingRepository.class);
+        var auditRepo = mock(OnboardingAuditLogRepository.class);
+        var ruleCache = mock(RuleCacheService.class);
+        var objectMapper = new ObjectMapper();
+
+        Programme p = Programme.builder()
+            .tenantId("t1")
+            .programmeUid("default")
+            .name("Default")
+            .activeConfigVersion(0)
+            .status(Programme.ProgrammeStatus.DRAFT)
+            .build();
+
+        TenantOnboarding tenant = TenantOnboarding.builder()
+            .tenantId("t1")
+            .onboardingStatus(OnboardingStatus.AGREEMENT_SIGNED)
+            .build();
+
+        when(programmeRepo.findByTenantIdAndProgrammeUid("t1", "default")).thenReturn(Optional.of(p));
+        when(programmeConfigRepo.findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc("t1", "default"))
+            .thenReturn(Optional.empty());
+        when(programmeConfigRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(programmeRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantOnboardingRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
+
+        ProgrammeService svc = new ProgrammeService(
+            programmeRepo,
+            programmeConfigRepo,
+            tenantOnboardingRepo,
+            new ProgrammeConfigSchemaValidator(objectMapper),
+            auditRepo,
+            objectMapper,
+            ruleCache,
+            mock(OnboardingStateMachine.class),
+            mock(EarnRuleRepository.class),
+            mock(CampaignRepository.class)
+        );
+
+        var config = objectMapper.readTree("""
+          {
+            "programmeIdentity": {"programmeName":"Prog","pointsName":"Pts","pointsSymbol":"pts","baseCurrency":"INR"},
+            "pointsEconomics": {"pointsMonetaryValue":0.01,"basePointsRate":1},
+            "conflictPolicy": {"defaultStrategy":"BEST_FOR_CUSTOMER","allowRuleOverride":true},
+            "tiers": {"enabled": false, "tiers":[{"tierUid":"standard","name":"Standard","rank":1,"entryThreshold":0,"maintenanceThreshold":0,"multiplier":1}]},
+            "expiry": {"model":"ROLLING","rollingMonths":24,"tierExtensionsEnabled":true,"notificationScheduleDays":[60,7,1],"processMode":"OVERNIGHT_BATCH",
+              "breakage":{"enabled":true,"reportFrequency":"MONTHLY","accountingCutoffTimezone":"Asia/Kolkata","exportEnabled":true}
+            },
+            "eventSchema": {"version":1,"standardFields":[{"name":"eventType","type":"string","required":true}],"customFields":[],"backwardCompatibilityDays":30}
+          }
+        """);
+
+        svc.saveConfig("t1", "default", config, "t1", "TENANT");
+
+        assertEquals(Programme.ProgrammeStatus.ACTIVE, p.getStatus());
+        verify(ruleCache, org.mockito.Mockito.atLeastOnce()).invalidateProgramme("t1", "default");
+    }
+
+    @Test
+    void saveConfig_afterGoLive_doesNotAutoActivateProgramme() throws Exception {
+        var programmeRepo = mock(ProgrammeRepository.class);
+        var programmeConfigRepo = mock(ProgrammeConfigRepository.class);
+        var tenantOnboardingRepo = mock(TenantOnboardingRepository.class);
+        var objectMapper = new ObjectMapper();
+
+        Programme p = Programme.builder()
+            .tenantId("t1")
+            .programmeUid("p1")
+            .name("Prog")
+            .activeConfigVersion(0)
+            .status(Programme.ProgrammeStatus.DRAFT)
+            .build();
+
+        TenantOnboarding tenant = TenantOnboarding.builder()
+            .tenantId("t1")
+            .onboardingStatus(OnboardingStatus.ACTIVE)
+            .build();
+
+        when(programmeRepo.findByTenantIdAndProgrammeUid("t1", "p1")).thenReturn(Optional.of(p));
+        when(programmeConfigRepo.findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc("t1", "p1"))
+            .thenReturn(Optional.empty());
+        when(programmeConfigRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(programmeRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantOnboardingRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
+
+        ProgrammeService svc = new ProgrammeService(
+            programmeRepo,
+            programmeConfigRepo,
+            tenantOnboardingRepo,
+            new ProgrammeConfigSchemaValidator(objectMapper),
+            mock(OnboardingAuditLogRepository.class),
+            objectMapper,
+            mock(RuleCacheService.class),
+            mock(OnboardingStateMachine.class),
+            mock(EarnRuleRepository.class),
+            mock(CampaignRepository.class)
+        );
+
+        var config = objectMapper.readTree("""
+          {
+            "programmeIdentity": {"programmeName":"Prog","pointsName":"Pts","pointsSymbol":"pts","baseCurrency":"INR"},
+            "pointsEconomics": {"pointsMonetaryValue":0.01,"basePointsRate":1},
+            "conflictPolicy": {"defaultStrategy":"BEST_FOR_CUSTOMER","allowRuleOverride":true},
+            "tiers": {"enabled": false, "tiers":[{"tierUid":"standard","name":"Standard","rank":1,"entryThreshold":0,"maintenanceThreshold":0,"multiplier":1}]},
+            "expiry": {"model":"ROLLING","rollingMonths":24,"tierExtensionsEnabled":true,"notificationScheduleDays":[60,7,1],"processMode":"OVERNIGHT_BATCH",
+              "breakage":{"enabled":true,"reportFrequency":"MONTHLY","accountingCutoffTimezone":"Asia/Kolkata","exportEnabled":true}
+            },
+            "eventSchema": {"version":1,"standardFields":[{"name":"eventType","type":"string","required":true}],"customFields":[],"backwardCompatibilityDays":30}
+          }
+        """);
+
+        svc.saveConfig("t1", "p1", config, "t1", "TENANT");
+
+        assertEquals(Programme.ProgrammeStatus.DRAFT, p.getStatus());
     }
 
     @Test

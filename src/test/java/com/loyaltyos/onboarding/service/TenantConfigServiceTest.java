@@ -148,4 +148,64 @@ class TenantConfigServiceTest {
         verify(stateMachine).transition(eq(tenant), eq(OnboardingStatus.CONFIGURED), eq("t1"), eq("TENANT"));
         verify(tenantRepo).save(eq(tenant));
     }
+
+    @Test
+    void saveLegacyProgrammeConfiguration_whenTenantActive_doesNotRegressOnboardingStatus() {
+        var tenantRepo = mock(TenantOnboardingRepository.class);
+        var cfgRepo = mock(TenantConfigRepository.class);
+        var tierRepo = mock(TierDefinitionRepository.class);
+        var webhookRepo = mock(WebhookSubscriptionRepository.class);
+        var programmeRepo = mock(ProgrammeRepository.class);
+        var programmeConfigRepo = mock(ProgrammeConfigRepository.class);
+        var auditRepo = mock(OnboardingAuditLogRepository.class);
+        var stateMachine = mock(OnboardingStateMachine.class);
+        var objectMapper = new ObjectMapper();
+        var schemaValidator = new ProgrammeConfigSchemaValidator(objectMapper);
+        when(programmeRepo.existsByTenantIdAndProgrammeUid("t1", "default")).thenReturn(true);
+        when(programmeConfigRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(programmeConfigRepo.findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc("t1", "default"))
+            .thenReturn(Optional.empty());
+        when(programmeRepo.findByTenantIdAndProgrammeUid("t1", "default")).thenReturn(Optional.empty());
+
+        TenantOnboarding tenant = TenantOnboarding.builder()
+            .tenantId("t1")
+            .companyName("Acme")
+            .slug("acme")
+            .email("x@x.com")
+            .passwordHash("hash")
+            .businessCategory("RETAIL")
+            .onboardingStatus(OnboardingStatus.ACTIVE)
+            .identityMode(IdentityMode.BOTH)
+            .subscriptionTier(SubscriptionTier.STANDARD)
+            .dataResidencyRegion(DataResidencyRegion.IN)
+            .countryCode("IN")
+            .build();
+
+        when(tenantRepo.findByTenantId("t1")).thenReturn(Optional.of(tenant));
+        when(cfgRepo.findByTenantId("t1")).thenReturn(Optional.empty());
+        when(cfgRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tierRepo.findByTenantIdOrderByRankOrderAsc("t1")).thenReturn(List.of());
+
+        ProgrammeConfigRequest req = new ProgrammeConfigRequest();
+        req.setProgrammeName("Prog");
+        req.setPointsName("Points");
+        req.setPointsSymbol("PTS");
+        req.setBaseCurrency("INR");
+        req.setBasePointsRate(new BigDecimal("1.0"));
+        req.setMinRedemptionPoints(new BigDecimal("100"));
+        req.setMaxRedemptionPctPerTxn(new BigDecimal("50"));
+        req.setTiersEnabled(false);
+
+        var ruleCache = mock(RuleCacheService.class);
+        TenantConfigService svc = new TenantConfigService(
+            tenantRepo, cfgRepo, tierRepo, webhookRepo, programmeRepo, programmeConfigRepo, auditRepo, stateMachine,
+            objectMapper, schemaValidator, ruleCache
+        );
+
+        svc.saveLegacyProgrammeConfiguration("t1", req);
+
+        verify(stateMachine, never()).transition(any(), any(), any(), any());
+        verify(tenantRepo, never()).save(eq(tenant));
+        verify(ruleCache).invalidateProgramme("t1", "default");
+    }
 }

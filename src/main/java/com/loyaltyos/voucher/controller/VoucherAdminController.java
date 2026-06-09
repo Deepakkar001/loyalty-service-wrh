@@ -111,20 +111,43 @@ public class VoucherAdminController {
     }
 
     @GetMapping("/batches")
-    public ResponseEntity<List<VoucherBatchListDto>> listBatches(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<List<VoucherBatchListDto>> listBatches(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(required = false) String programmeUid,
+        @RequestParam(required = false) String catalogRewardUid
+    ) {
         String tenantId = TenantJwt.tenantId(jwt);
-        List<VoucherBatchListDto> list = batchRepository.findByTenantIdOrderByUploadedAtDesc(tenantId).stream()
-            .map(b -> {
-                VoucherBatchListDto dto = new VoucherBatchListDto();
-                dto.setBatchUid(b.getBatchUid());
-                dto.setStatus(b.getStatus().name());
-                dto.setCatalogRewardUid(b.getCatalogRewardUid());
-                dto.setImportedCount(b.getImportedCount());
-                dto.setUploadedAt(b.getUploadedAt());
-                return dto;
-            })
-            .toList();
+        String programme = programmeUid == null || programmeUid.isBlank() ? null : programmeUid.trim();
+        String catalog = catalogRewardUid == null || catalogRewardUid.isBlank() ? null : catalogRewardUid.trim();
+
+        List<VoucherBatch> batches;
+        if (programme != null && catalog != null) {
+            batches = batchRepository.findByTenantIdAndProgrammeUidAndCatalogRewardUidOrderByUploadedAtDesc(
+                tenantId, programme, catalog
+            );
+        } else if (programme != null) {
+            batches = batchRepository.findByTenantIdAndProgrammeUidOrderByUploadedAtDesc(tenantId, programme);
+        } else {
+            batches = batchRepository.findByTenantIdOrderByUploadedAtDesc(tenantId);
+        }
+
+        List<VoucherBatchListDto> list = batches.stream().map(this::toListDto).toList();
         return ResponseEntity.ok(list);
+    }
+
+    private VoucherBatchListDto toListDto(VoucherBatch b) {
+        VoucherBatchListDto dto = new VoucherBatchListDto();
+        dto.setBatchUid(b.getBatchUid());
+        dto.setProgrammeUid(b.getProgrammeUid());
+        dto.setStatus(b.getStatus().name());
+        dto.setCatalogRewardUid(b.getCatalogRewardUid());
+        dto.setOriginalFilename(b.getOriginalFilename());
+        dto.setTotalRowsUploaded(b.getTotalRowsUploaded());
+        dto.setImportedCount(b.getImportedCount());
+        dto.setDuplicateCount(b.getDuplicateCount());
+        dto.setErrorCount(b.getErrorCount());
+        dto.setUploadedAt(b.getUploadedAt());
+        return dto;
     }
 
     @GetMapping("/stock/{catalogRewardUid}")

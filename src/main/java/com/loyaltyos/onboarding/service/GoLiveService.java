@@ -18,7 +18,6 @@ import com.loyaltyos.onboarding.repository.TenantApiKeyRepository;
 import com.loyaltyos.onboarding.repository.TenantConfigRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.repository.TierDefinitionRepository;
-import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -43,7 +42,6 @@ public class GoLiveService {
     private final TenantConfigRepository tenantConfigRepository;
     private final TierDefinitionRepository tierDefinitionRepository;
     private final TenantApiKeyRepository tenantApiKeyRepository;
-    private final WebhookSubscriptionRepository webhookSubscriptionRepository;
     private final OnboardingAuditLogRepository auditLogRepository;
     private final OnboardingStateMachine stateMachine;
     // private final KafkaTemplate<String, Object> kafkaTemplate; // re-enable with Kafka
@@ -54,7 +52,6 @@ public class GoLiveService {
         TenantConfigRepository tenantConfigRepository,
         TierDefinitionRepository tierDefinitionRepository,
         TenantApiKeyRepository tenantApiKeyRepository,
-        WebhookSubscriptionRepository webhookSubscriptionRepository,
         OnboardingAuditLogRepository auditLogRepository,
         OnboardingStateMachine stateMachine
     ) {
@@ -63,7 +60,6 @@ public class GoLiveService {
         this.tenantConfigRepository = Objects.requireNonNull(tenantConfigRepository, "tenantConfigRepository");
         this.tierDefinitionRepository = Objects.requireNonNull(tierDefinitionRepository, "tierDefinitionRepository");
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
-        this.webhookSubscriptionRepository = Objects.requireNonNull(webhookSubscriptionRepository, "webhookSubscriptionRepository");
         this.auditLogRepository = Objects.requireNonNull(auditLogRepository, "auditLogRepository");
         this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
     }
@@ -80,7 +76,6 @@ public class GoLiveService {
         boolean tiersExist = tierDefinitionRepository.countByTenantId(tenantId) > 0;
         boolean prodKeyExists = !tenantApiKeyRepository.findByTenantIdAndEnvironmentAndStatus(
             tenantId, ApiKeyEnvironment.PRODUCTION, ApiKeyStatus.ACTIVE).isEmpty();
-        boolean webhookConfigured = webhookSubscriptionRepository.countByTenantIdAndActiveTrue(tenantId) > 0;
 
         boolean canGoLive = agreementApproved && configExists && tiersExist && prodKeyExists;
 
@@ -89,7 +84,6 @@ public class GoLiveService {
         items.add(item("Programme configured (tenant_config)", configExists, true, null));
         items.add(item("At least 1 tier defined", tiersExist, true, null));
         items.add(item("Production API credentials generated", prodKeyExists, true, "Generate production keys in Integrate"));
-        items.add(item("Webhook URL configured", webhookConfigured, false, null));
 
         return GoLiveChecklistResponse.builder()
             .canGoLive(canGoLive)

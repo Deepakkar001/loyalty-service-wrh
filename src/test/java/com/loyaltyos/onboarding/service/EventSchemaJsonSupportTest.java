@@ -3,6 +3,8 @@ package com.loyaltyos.onboarding.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.loyaltyos.onboarding.dto.EventDefinitionRequest;
 import org.junit.jupiter.api.Test;
 
 class EventSchemaJsonSupportTest {
@@ -54,5 +56,37 @@ class EventSchemaJsonSupportTest {
         );
 
         assertThat(EventSchemaJsonSupport.triggerTypesFromEventSchema(root)).isEqualTo("PURCHASE,LOGIN");
+    }
+
+    @Test
+    void replaceEventDefinition_updatesOnlyMatchingEvent() throws Exception {
+        ObjectNode schema = (ObjectNode) objectMapper.readTree(
+            """
+            {
+              "version": 2,
+              "eventDefinitions": [
+                {"eventType": "PURCHASE", "coreFields": [{"name": "amount", "type": "number", "required": true}]},
+                {"eventType": "LOGIN", "coreFields": [{"name": "sessionId", "type": "string", "required": true}]}
+              ],
+              "customFields": []
+            }
+            """
+        );
+
+        EventDefinitionRequest patch = new EventDefinitionRequest();
+        patch.setEventType("PURCHASE");
+        patch.setCoreFields(objectMapper.readTree(
+            "[{\"name\":\"amount\",\"type\":\"number\",\"required\":true},{\"name\":\"channel\",\"type\":\"string\",\"required\":false}]"
+        ));
+
+        EventSchemaJsonSupport.replaceEventDefinition(
+            schema,
+            "purchase",
+            EventSchemaJsonSupport.toEventDefinitionNode(patch)
+        );
+
+        assertThat(schema.path("eventDefinitions").get(0).path("coreFields")).hasSize(2);
+        assertThat(schema.path("eventDefinitions").get(1).path("coreFields")).hasSize(1);
+        assertThat(schema.path("standardFields")).isNotEmpty();
     }
 }

@@ -296,6 +296,9 @@ public class AnalyticsQueryRepository {
         String tdScope = AnalyticsProgrammeSql.programmeScope("tier_definitions");
         String ledgerProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
         String thProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("th.programme_uid");
+        String thProgrammeBare = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
+        String plCustomerId = AnalyticsProgrammeSql.collateColumn("customer_id");
+        String thCustomerId = AnalyticsProgrammeSql.collateColumn("customer_id");
         String sql = """
             WITH tier_rank_2 AS (
               SELECT MIN(name) AS tier_name
@@ -307,13 +310,24 @@ public class AnalyticsQueryRepository {
               FROM tier_definitions
               WHERE tenant_id = :tenantId AND %s AND rank_order = 3
             ),
+            member_first_activity AS (
+              SELECT customer_id, MIN(first_at) AS first_txn_at
+              FROM (
+                SELECT %s AS customer_id, created_at AS first_at
+                FROM points_ledger
+                WHERE tenant_id = :tenantId AND %s AND entry_type = 'CREDIT'
+                UNION ALL
+                SELECT %s AS customer_id, changed_at AS first_at
+                FROM tier_history
+                WHERE tenant_id = :tenantId AND %s
+              ) activity
+              GROUP BY customer_id
+            ),
             acquisition_cohorts AS (
               SELECT customer_id,
-                     DATE_FORMAT(MIN(created_at), '%%Y-%%m') AS cohort_month,
-                     MIN(created_at) AS first_txn_at
-              FROM points_ledger
-              WHERE tenant_id = :tenantId AND %s AND entry_type = 'CREDIT'
-              GROUP BY customer_id
+                     DATE_FORMAT(first_txn_at, '%%Y-%%m') AS cohort_month,
+                     first_txn_at
+              FROM member_first_activity
             ),
             first_tier_reach AS (
               SELECT th.customer_id, th.to_tier_name,
@@ -343,12 +357,24 @@ public class AnalyticsQueryRepository {
             CROSS JOIN tier_rank_2 tr2
             CROSS JOIN tier_rank_3 tr3
             LEFT JOIN first_tier_reach ftr_s
-              ON ac.customer_id = ftr_s.customer_id AND ftr_s.to_tier_name = tr2.tier_name
+              ON %s AND %s
             LEFT JOIN first_tier_reach ftr_g
-              ON ac.customer_id = ftr_g.customer_id AND ftr_g.to_tier_name = tr3.tier_name
+              ON %s AND %s
             GROUP BY ac.cohort_month, tr2.tier_name, tr3.tier_name
             ORDER BY ac.cohort_month ASC
-            """.formatted(tdScope, tdScope, ledgerProgramme, thProgramme);
+            """.formatted(
+            tdScope,
+            tdScope,
+            plCustomerId,
+            ledgerProgramme,
+            thCustomerId,
+            thProgrammeBare,
+            thProgramme,
+            AnalyticsProgrammeSql.programmeColumnEqualsColumn("ac.customer_id", "ftr_s.customer_id"),
+            AnalyticsProgrammeSql.programmeColumnEqualsColumn("ftr_s.to_tier_name", "tr2.tier_name"),
+            AnalyticsProgrammeSql.programmeColumnEqualsColumn("ac.customer_id", "ftr_g.customer_id"),
+            AnalyticsProgrammeSql.programmeColumnEqualsColumn("ftr_g.to_tier_name", "tr3.tier_name")
+        );
         return jdbc.query(sql, params, (rs, i) -> new TierUpgradeCohortRow(
             rs.getString("cohort_month"),
             rs.getLong("cohort_size"),
@@ -370,24 +396,33 @@ public class AnalyticsQueryRepository {
             .addValue("tierName", tierName);
         String ledgerProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
         String thProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("th.programme_uid");
+        String thProgrammeBare = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
+        String plCustomerId = AnalyticsProgrammeSql.collateColumn("customer_id");
+        String thCustomerId = AnalyticsProgrammeSql.collateColumn("customer_id");
         String sql = """
-            WITH acquisition_cohorts AS (
-              SELECT customer_id, MIN(created_at) AS first_txn_at
-              FROM points_ledger
-              WHERE tenant_id = :tenantId AND %s AND entry_type = 'CREDIT'
+            WITH member_first_activity AS (
+              SELECT customer_id, MIN(first_at) AS first_txn_at
+              FROM (
+                SELECT %s AS customer_id, created_at AS first_at
+                FROM points_ledger
+                WHERE tenant_id = :tenantId AND %s AND entry_type = 'CREDIT'
+                UNION ALL
+                SELECT %s AS customer_id, changed_at AS first_at
+                FROM tier_history
+                WHERE tenant_id = :tenantId AND %s
+              ) activity
               GROUP BY customer_id
             ),
             days_to_tier AS (
-              SELECT ac.customer_id,
+              SELECT th.customer_id,
                      th.to_tier_name,
-                     DATEDIFF(MIN(th.changed_at), ac.first_txn_at) AS days_taken
-              FROM acquisition_cohorts ac
-              JOIN tier_history th
-                ON ac.customer_id = th.customer_id
-               AND th.tenant_id = :tenantId
+                     DATEDIFF(MIN(th.changed_at), mfa.first_txn_at) AS days_taken
+              FROM tier_history th
+              JOIN member_first_activity mfa ON %s
+              WHERE th.tenant_id = :tenantId
                AND %s
-               AND th.to_tier_name = :tierName
-              GROUP BY ac.customer_id, th.to_tier_name, ac.first_txn_at
+               AND %s
+              GROUP BY th.customer_id, th.to_tier_name, mfa.first_txn_at
             )
             SELECT
               CASE
@@ -401,7 +436,15 @@ public class AnalyticsQueryRepository {
             FROM days_to_tier
             GROUP BY upgrade_bucket
             ORDER BY MIN(days_taken)
-            """.formatted(ledgerProgramme, thProgramme);
+            """.formatted(
+            plCustomerId,
+            ledgerProgramme,
+            thCustomerId,
+            thProgrammeBare,
+            AnalyticsProgrammeSql.programmeColumnEqualsColumn("mfa.customer_id", "th.customer_id"),
+            thProgramme,
+            AnalyticsProgrammeSql.tierNameEqualsParam("th.to_tier_name")
+        );
         return jdbc.query(sql, params, (rs, i) -> new TierVelocityBucketRow(
             rs.getString("upgrade_bucket"),
             rs.getLong("member_count")

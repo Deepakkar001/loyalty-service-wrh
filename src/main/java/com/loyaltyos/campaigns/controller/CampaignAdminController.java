@@ -2,6 +2,8 @@ package com.loyaltyos.campaigns.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.loyaltyos.campaigns.dto.CampaignEventSchemaUpsertRequest;
+import com.loyaltyos.onboarding.dto.EventDefinitionRequest;
+import com.loyaltyos.onboarding.dto.EventSchemaSettingsPatchRequest;
 import com.loyaltyos.campaigns.dto.CampaignSetupStatusResponse;
 import com.loyaltyos.campaigns.dto.CampaignResponse;
 import com.loyaltyos.campaigns.dto.CampaignStatsResponse;
@@ -19,7 +21,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -134,6 +138,47 @@ public class CampaignAdminController {
     ) {
         String tenantId = requireTenant(jwt);
         return ResponseEntity.ok(campaignService.upsertEventSchema(tenantId, campaignUid, body));
+    }
+
+    @PatchMapping("/{campaignUid}/event-schema/events/{eventType}")
+    public ResponseEntity<CampaignResponse> patchEventDefinition(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("campaignUid") String campaignUid,
+        @PathVariable("eventType") String eventType,
+        @Valid @RequestBody EventDefinitionRequest body
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignService.patchEventDefinition(tenantId, campaignUid, eventType, body));
+    }
+
+    @PostMapping("/{campaignUid}/event-schema/events")
+    public ResponseEntity<CampaignResponse> addEventDefinition(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("campaignUid") String campaignUid,
+        @Valid @RequestBody EventDefinitionRequest body
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignService.addEventDefinition(tenantId, campaignUid, body));
+    }
+
+    @DeleteMapping("/{campaignUid}/event-schema/events/{eventType}")
+    public ResponseEntity<CampaignResponse> removeEventDefinition(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("campaignUid") String campaignUid,
+        @PathVariable("eventType") String eventType
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignService.removeEventDefinition(tenantId, campaignUid, eventType));
+    }
+
+    @PatchMapping("/{campaignUid}/event-schema/settings")
+    public ResponseEntity<CampaignResponse> patchEventSchemaSettings(
+        @AuthenticationPrincipal Jwt jwt,
+        @PathVariable("campaignUid") String campaignUid,
+        @Valid @RequestBody EventSchemaSettingsPatchRequest body
+    ) {
+        String tenantId = requireTenant(jwt);
+        return ResponseEntity.ok(campaignService.patchEventSchemaSettings(tenantId, campaignUid, body));
     }
 
     @GetMapping("/{campaignUid}/stats")

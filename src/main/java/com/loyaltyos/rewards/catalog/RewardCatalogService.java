@@ -1,10 +1,5 @@
 package com.loyaltyos.rewards.catalog;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.loyaltyos.onboarding.entity.ProgrammeConfig;
-import com.loyaltyos.onboarding.service.ProgrammeService;
 import com.loyaltyos.voucher.entity.VoucherDenominationMapping;
 import com.loyaltyos.voucher.repository.VoucherDenominationMappingRepository;
 import com.loyaltyos.voucher.support.VoucherDenominationSupport;
@@ -20,32 +15,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class RewardCatalogService {
 
-    private final ProgrammeService programmeService;
-    private final ObjectMapper objectMapper;
+    private final RewardCatalogDbMergeService catalogDbMergeService;
     private final ObjectProvider<VoucherDenominationMappingRepository> denominationMappingRepository;
 
     public RewardCatalogService(
-        ProgrammeService programmeService,
-        ObjectMapper objectMapper,
+        RewardCatalogDbMergeService catalogDbMergeService,
         ObjectProvider<VoucherDenominationMappingRepository> denominationMappingRepository
     ) {
-        this.programmeService = Objects.requireNonNull(programmeService, "programmeService");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.catalogDbMergeService = Objects.requireNonNull(catalogDbMergeService, "catalogDbMergeService");
         this.denominationMappingRepository = Objects.requireNonNull(denominationMappingRepository);
     }
 
     public RewardCatalogSnapshot loadCatalog(String tenantId, String programmeUid) {
-        String p = normalizeProgramme(programmeUid);
-        ProgrammeConfig cfg = programmeService.getActiveConfigOrNull(tenantId, p);
-        if (cfg == null || cfg.getConfigJson() == null || cfg.getConfigJson().isBlank()) {
-            return RewardCatalogSnapshot.empty();
-        }
-        try {
-            JsonNode root = objectMapper.readTree(cfg.getConfigJson());
-            return RewardCatalogJsonSupport.parseFromProgrammeRoot(root);
-        } catch (JsonProcessingException e) {
-            return RewardCatalogSnapshot.empty();
-        }
+        return catalogDbMergeService.mergeFromDatabase(tenantId, normalizeProgramme(programmeUid)).catalog();
     }
 
     public Optional<RewardCatalogItem> findActiveItem(String tenantId, String programmeUid, String rewardUid) {

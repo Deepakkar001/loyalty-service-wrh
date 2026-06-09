@@ -25,6 +25,7 @@ import com.loyaltyos.onboarding.repository.WebhookSubscriptionRepository;
 import com.loyaltyos.rules.service.RuleCacheService;
 import com.loyaltyos.onboarding.service.statemachine.OnboardingStateMachine;
 // import org.springframework.kafka.core.KafkaTemplate; // re-enable with Kafka
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -149,28 +150,25 @@ public class TenantConfigService {
         JsonNode canonical = objectMapper.valueToTree(buildCanonicalProgrammeConfig(cfg, request, persistedTiers));
         programmeConfigSchemaValidator.validate(canonical);
         cfg.setProgrammeConfig(toJson(canonical));
-        cfg.setProgrammeConfigVersion((cfg.getProgrammeConfigVersion() == null ? 0 : cfg.getProgrammeConfigVersion()) + 1);
+        // Allocate a programme config version that is safe under concurrent saves.
+        // (Simple increment on tenant_config can race across parallel requests and collide on programme_config.uk_programme_version)
+        ensureDefaultProgrammeExists(tenantId, request.getProgrammeName());
+        int nextVersion = computeNextDefaultProgrammeConfigVersion(tenantId, cfg);
+        cfg.setProgrammeConfigVersion(nextVersion);
         tenantConfigRepository.save(cfg);
 
         // Also write into programme_config table for v2 consumers (default programme).
-        ensureDefaultProgrammeExists(tenantId, request.getProgrammeName());
         // IMPORTANT: keep Programme.activeConfigVersion in sync with programme_config writes.
         // Otherwise, v2 saveConfig() will compute nextVersion incorrectly and can collide on (tenantId, programmeUid, version).
-        final Integer newVersion = cfg.getProgrammeConfigVersion();
+        final int persistedVersion = saveDefaultProgrammeConfigRowWithRetry(tenantId, canonical, nextVersion);
+        if (persistedVersion != nextVersion) {
+            cfg.setProgrammeConfigVersion(persistedVersion);
+            tenantConfigRepository.save(cfg);
+        }
         programmeRepository.findByTenantIdAndProgrammeUid(tenantId, "default").ifPresent(p -> {
-            p.setActiveConfigVersion(newVersion);
+            p.setActiveConfigVersion(persistedVersion);
             programmeRepository.save(p);
         });
-        com.loyaltyos.onboarding.entity.ProgrammeConfig pc = com.loyaltyos.onboarding.entity.ProgrammeConfig.builder()
-            .tenantId(tenantId)
-            .programmeUid("default")
-            .configVersion(cfg.getProgrammeConfigVersion())
-            .configJson(toJson(canonical))
-            .effectiveFrom(Instant.now())
-            .createdByActorId(tenantId)
-            .createdByRole("TENANT")
-            .build();
-        programmeConfigRepository.save(Objects.requireNonNull(pc, "programmeConfig"));
 
         ruleCacheService.invalidateProgramme(tenantId, "default");
 
@@ -199,8 +197,8 @@ public class TenantConfigService {
             webhookSubscriptionRepository.save(sub);
         }
 
-        // Transition onboarding status to CONFIGURED
-        if (tenant.getOnboardingStatus() != OnboardingStatus.CONFIGURED) {
+        // Guided setup only: AGREEMENT_SIGNED → CONFIGURED. Post-setup edits must not regress status.
+        if (tenant.getOnboardingStatus() == OnboardingStatus.AGREEMENT_SIGNED) {
             stateMachine.transition(tenant, OnboardingStatus.CONFIGURED, tenantId, "TENANT");
             tenantOnboardingRepository.save(tenant);
         }
@@ -213,6 +211,8 @@ public class TenantConfigService {
             .afterState(Map.of("programmeName", request.getProgrammeName()))
             .build();
         auditLogRepository.save(Objects.requireNonNull(audit, "audit"));
+
+        maybeActivateDefaultProgrammeDuringGuidedSetup(tenantId, tenant.getOnboardingStatus());
 
         // --- Kafka publish (disabled) — topic platform.config.updates ---
         // ProgrammeConfigUpdatedEvent event = ProgrammeConfigUpdatedEvent.builder()
@@ -227,6 +227,75 @@ public class TenantConfigService {
         // kafkaTemplate.send("platform.config.updates", tenantId, event);
 
         return buildLegacyResponse(tenantId, request);
+    }
+
+    private int computeNextDefaultProgrammeConfigVersion(String tenantId, TenantConfig cfg) {
+        int cfgVersion = cfg.getProgrammeConfigVersion() == null ? 0 : cfg.getProgrammeConfigVersion();
+        return Math.max(cfgVersion, computeLatestDefaultProgrammeConfigVersion(tenantId)) + 1;
+    }
+
+    private int computeLatestDefaultProgrammeConfigVersion(String tenantId) {
+        int latestPersisted = programmeConfigRepository
+            .findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc(tenantId, "default")
+            .map(c -> c.getConfigVersion() == null ? 0 : c.getConfigVersion())
+            .orElse(0);
+        int activeOnProgrammeRow = programmeRepository.findByTenantIdAndProgrammeUid(tenantId, "default")
+            .map(p -> p.getActiveConfigVersion() == null ? 0 : p.getActiveConfigVersion())
+            .orElse(0);
+        return Math.max(latestPersisted, activeOnProgrammeRow);
+    }
+
+    private int saveDefaultProgrammeConfigRowWithRetry(String tenantId, JsonNode canonical, int initialVersion) {
+        int attemptVersion = initialVersion;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                com.loyaltyos.onboarding.entity.ProgrammeConfig pc =
+                    com.loyaltyos.onboarding.entity.ProgrammeConfig.builder()
+                        .tenantId(tenantId)
+                        .programmeUid("default")
+                        .configVersion(attemptVersion)
+                        .configJson(toJson(canonical))
+                        .effectiveFrom(Instant.now())
+                        .createdByActorId(tenantId)
+                        .createdByRole("TENANT")
+                        .build();
+                programmeConfigRepository.save(Objects.requireNonNull(pc, "programmeConfig"));
+                return attemptVersion;
+            } catch (DataIntegrityViolationException ex) {
+                // Another request likely inserted the same (tenantId, programmeUid, configVersion). Recompute and retry once.
+                if (attempt == 0) {
+                    attemptVersion = computeLatestDefaultProgrammeConfigVersion(tenantId) + 1;
+                    continue;
+                }
+                throw ex;
+            }
+        }
+        return attemptVersion;
+    }
+
+    private void maybeActivateDefaultProgrammeDuringGuidedSetup(String tenantId, OnboardingStatus onboardingStatus) {
+        if (!isGuidedSetupInProgress(onboardingStatus)) {
+            return;
+        }
+        programmeRepository.findByTenantIdAndProgrammeUid(tenantId, "default").ifPresent(p -> {
+            if (p.getStatus() == com.loyaltyos.onboarding.entity.Programme.ProgrammeStatus.ACTIVE
+                || p.getStatus() == com.loyaltyos.onboarding.entity.Programme.ProgrammeStatus.ARCHIVED) {
+                return;
+            }
+            p.setStatus(com.loyaltyos.onboarding.entity.Programme.ProgrammeStatus.ACTIVE);
+            p.setUpdatedAt(Instant.now());
+            programmeRepository.save(p);
+            ruleCacheService.invalidateProgramme(tenantId, "default");
+        });
+    }
+
+    private static boolean isGuidedSetupInProgress(OnboardingStatus status) {
+        if (status == null) {
+            return false;
+        }
+        return status != OnboardingStatus.ACTIVE
+            && status != OnboardingStatus.SUSPENDED
+            && status != OnboardingStatus.TERMINATED;
     }
 
     private void ensureDefaultProgrammeExists(String tenantId, String programmeName) {
@@ -350,7 +419,35 @@ public class TenantConfigService {
             "subscribedEvents", List.of()
         ));
 
+        preserveRewardCatalogFromLatestConfig(cfg.getTenantId(), "default", root);
         return root;
+    }
+
+    /** Keeps reward catalog when legacy programme configuration save rebuilds the config blob. */
+    private void preserveRewardCatalogFromLatestConfig(
+        String tenantId,
+        String programmeUid,
+        Map<String, Object> targetRoot
+    ) {
+        programmeConfigRepository.findTopByTenantIdAndProgrammeUidOrderByConfigVersionDesc(tenantId, programmeUid)
+            .ifPresent(row -> {
+                try {
+                    JsonNode existing = objectMapper.readTree(row.getConfigJson());
+                    JsonNode catalog = existing.path("rewardCatalog");
+                    if (catalog.isMissingNode() || catalog.isNull() || !catalog.path("items").isArray()) {
+                        return;
+                    }
+                    if (catalog.path("items").isEmpty()) {
+                        return;
+                    }
+                    targetRoot.put(
+                        "rewardCatalog",
+                        objectMapper.convertValue(catalog, new TypeReference<Map<String, Object>>() {})
+                    );
+                } catch (Exception ignored) {
+                    // Best-effort preserve; full config save still proceeds.
+                }
+            });
     }
 
     @Transactional(readOnly = true)

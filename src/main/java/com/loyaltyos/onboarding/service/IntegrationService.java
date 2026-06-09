@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
 import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.entity.SandboxTestEvent;
@@ -291,18 +292,32 @@ public class IntegrationService {
         }
 
         RuleEvaluationResponse ruleRes = null;
-        try {
-            RuleEvaluateRequest ruleReq = integrationEventPayloadResolver.buildRuleEvaluateRequest(payload);
-            ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
-                ? ruleEvaluationService.evaluateSingleRule(tenantId, request.getRuleUid(), ruleReq)
-                : ruleEvaluationService.evaluate(tenantId, ruleReq);
+        String customerId = resolveCustomerId(payload);
+        if (campaignRule != null && !targetedCustomerOk) {
+            ruleRes = buildTargetedAudienceNoMatchResponse(
+                tenantId,
+                programmeUid,
+                customerId,
+                targetedErrorCode,
+                targetedErrorMessage
+            );
+            result.put("ruleEvaluationSkipped", true);
+            result.put("ruleEvaluationSkippedReason", targetedErrorCode);
             result.put("ruleEvaluation", objectMapper.convertValue(ruleRes, new TypeReference<Map<String, Object>>() {}));
-        } catch (IllegalArgumentException e) {
-            log.debug("Sandbox rule evaluation skipped: {}", e.getMessage());
-            result.put("ruleEvaluationError", e.getMessage());
-        } catch (Exception e) {
-            log.debug("Sandbox rule evaluation failed: {}", e.getMessage());
-            result.put("ruleEvaluationError", e.getMessage());
+        } else {
+            try {
+                RuleEvaluateRequest ruleReq = integrationEventPayloadResolver.buildRuleEvaluateRequest(payload);
+                ruleRes = request.getRuleUid() != null && !request.getRuleUid().isBlank()
+                    ? ruleEvaluationService.evaluateSingleRule(tenantId, request.getRuleUid(), ruleReq)
+                    : ruleEvaluationService.evaluate(tenantId, ruleReq);
+                result.put("ruleEvaluation", objectMapper.convertValue(ruleRes, new TypeReference<Map<String, Object>>() {}));
+            } catch (IllegalArgumentException e) {
+                log.debug("Sandbox rule evaluation skipped: {}", e.getMessage());
+                result.put("ruleEvaluationError", e.getMessage());
+            } catch (Exception e) {
+                log.debug("Sandbox rule evaluation failed: {}", e.getMessage());
+                result.put("ruleEvaluationError", e.getMessage());
+            }
         }
 
         boolean sandboxPassed = false;
@@ -328,6 +343,39 @@ public class IntegrationService {
 
         persistSandboxTestEvent(tenantId, payload, result);
         return result;
+    }
+
+    /**
+     * Campaign sandbox: when the customer is outside a TARGETED audience, do not evaluate rule conditions.
+     * Mirrors production eligibility ({@code CampaignEligibilityService#matchesCustomerScope}) for sandbox UX.
+     */
+    private RuleEvaluationResponse buildTargetedAudienceNoMatchResponse(
+        String tenantId,
+        String programmeUid,
+        String customerId,
+        String errorCode,
+        String errorMessage
+    ) {
+        ObjectNode trace = objectMapper.createObjectNode();
+        trace.put("skipped", true);
+        trace.put("skipReason", errorCode != null ? errorCode : "TARGETED_CUSTOMER_NOT_IN_LIST");
+        if (errorMessage != null && !errorMessage.isBlank()) {
+            trace.put("targetedErrorMessage", errorMessage);
+        }
+        return RuleEvaluationResponse.builder()
+            .tenantId(tenantId)
+            .programmeUid(programmeUid)
+            .customerId(customerId)
+            .basePointsCalculated(BigDecimal.ZERO)
+            .finalPointsAwarded(BigDecimal.ZERO)
+            .matchedRules(List.of())
+            .suppressedRules(List.of())
+            .rewardCommands(List.of())
+            .catalogGrants(List.of())
+            .success(true)
+            .message("No match")
+            .evaluationTrace(trace)
+            .build();
     }
 
     private static String resolveCustomerId(Map<String, Object> payload) {

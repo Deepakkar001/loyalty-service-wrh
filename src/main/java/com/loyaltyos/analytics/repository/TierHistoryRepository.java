@@ -1,6 +1,7 @@
 package com.loyaltyos.analytics.repository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Objects;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -30,11 +31,11 @@ public class TierHistoryRepository {
             INSERT INTO tier_history (
               tenant_id, programme_uid, customer_id,
               from_tier_uid, to_tier_uid, from_tier_name, to_tier_name,
-              balance_at_change, trigger_type
+              balance_at_change, trigger_type, changed_at
             ) VALUES (
               :tenantId, :programmeUid, :customerId,
               :fromTierUid, :toTierUid, :fromTierName, :toTierName,
-              :balanceAtChange, :triggerType
+              :balanceAtChange, :triggerType, :changedAt
             )
             """;
         var params = new MapSqlParameterSource()
@@ -46,7 +47,8 @@ public class TierHistoryRepository {
             .addValue("fromTierName", fromTierName)
             .addValue("toTierName", toTierName)
             .addValue("balanceAtChange", balanceAtChange)
-            .addValue("triggerType", triggerType);
+            .addValue("triggerType", triggerType)
+            .addValue("changedAt", Instant.now());
         jdbc.update(sql, params);
     }
 }

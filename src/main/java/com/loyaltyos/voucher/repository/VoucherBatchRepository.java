@@ -12,4 +12,12 @@ public interface VoucherBatchRepository extends JpaRepository<VoucherBatch, Long
     Optional<VoucherBatch> findByTenantIdAndFileSha256(String tenantId, String fileSha256);
 
     List<VoucherBatch> findByTenantIdOrderByUploadedAtDesc(String tenantId);
+
+    List<VoucherBatch> findByTenantIdAndProgrammeUidOrderByUploadedAtDesc(String tenantId, String programmeUid);
+
+    List<VoucherBatch> findByTenantIdAndProgrammeUidAndCatalogRewardUidOrderByUploadedAtDesc(
+        String tenantId,
+        String programmeUid,
+        String catalogRewardUid
+    );
 }
