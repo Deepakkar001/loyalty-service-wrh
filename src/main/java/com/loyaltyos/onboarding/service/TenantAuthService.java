@@ -4,7 +4,9 @@ import com.loyaltyos.onboarding.dto.LoginRequest;
 import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.exception.EmailNotVerifiedException;
 import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
+import com.loyaltyos.onboarding.enums.ContactRole;
 import com.loyaltyos.onboarding.repository.TenantAgreementRepository;
+import com.loyaltyos.onboarding.repository.TenantContactRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.onboarding.security.JwtProperties;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,6 +24,7 @@ import java.util.Objects;
 public class TenantAuthService {
 
     private final TenantOnboardingRepository tenantRepository;
+    private final TenantContactRepository contactRepository;
     private final TenantAgreementRepository agreementRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
@@ -30,6 +33,7 @@ public class TenantAuthService {
 
     public TenantAuthService(
         TenantOnboardingRepository tenantRepository,
+        TenantContactRepository contactRepository,
         TenantAgreementRepository agreementRepository,
         PasswordEncoder passwordEncoder,
         JwtEncoder jwtEncoder,
@@ -37,6 +41,7 @@ public class TenantAuthService {
         RefreshTokenService refreshTokenService
     ) {
         this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
+        this.contactRepository = Objects.requireNonNull(contactRepository, "contactRepository");
         this.agreementRepository = Objects.requireNonNull(agreementRepository, "agreementRepository");
         this.passwordEncoder = Objects.requireNonNull(passwordEncoder, "passwordEncoder");
         this.jwtEncoder = Objects.requireNonNull(jwtEncoder, "jwtEncoder");
@@ -64,9 +69,12 @@ public class TenantAuthService {
             .map(a -> a.getStatus())
             .orElse(null);
 
+        String fullName = resolveFullName(tenant.getTenantId());
+
         LoginResponse access = issueAccessToken(
             tenant.getTenantId(),
             tenant.getEmail(),
+            fullName,
             "TENANT_ADMIN",
             tenant.getOnboardingStatus(),
             latestAgreementStatus
@@ -93,9 +101,12 @@ public class TenantAuthService {
             .map(a -> a.getStatus())
             .orElse(null);
 
+        String fullName = resolveFullName(tenant.getTenantId());
+
         LoginResponse access = issueAccessToken(
             tenant.getTenantId(),
             tenant.getEmail(),
+            fullName,
             principal.role(),
             tenant.getOnboardingStatus(),
             latestAgreementStatus
@@ -112,9 +123,16 @@ public class TenantAuthService {
         refreshTokenService.revoke(refreshToken);
     }
 
+    private String resolveFullName(String tenantId) {
+        return contactRepository.findByTenantIdAndRole(tenantId, ContactRole.PRIMARY_ADMIN)
+            .map(contact -> contact.getName())
+            .orElse(null);
+    }
+
     private LoginResponse issueAccessToken(
         String tenantId,
         String email,
+        String fullName,
         String role,
         com.loyaltyos.onboarding.enums.OnboardingStatus status,
         com.loyaltyos.onboarding.enums.AgreementStatus latestAgreementStatus
@@ -141,6 +159,7 @@ public class TenantAuthService {
             .expiresInSeconds(exp.getEpochSecond() - now.getEpochSecond())
             .tenantId(tenantId)
             .email(email)
+            .fullName(fullName)
             .onboardingStatus(status)
             .latestAgreementStatus(latestAgreementStatus)
             .build();

@@ -10,6 +10,7 @@ public class LoginResponse {
 
     private String tenantId;
     private String email;
+    private String fullName;
     private OnboardingStatus onboardingStatus;
     private AgreementStatus latestAgreementStatus;
 
@@ -21,6 +22,7 @@ public class LoginResponse {
         long expiresInSeconds,
         String tenantId,
         String email,
+        String fullName,
         OnboardingStatus onboardingStatus,
         AgreementStatus latestAgreementStatus
     ) {
@@ -29,6 +31,7 @@ public class LoginResponse {
         this.expiresInSeconds = expiresInSeconds;
         this.tenantId = tenantId;
         this.email = email;
+        this.fullName = fullName;
         this.onboardingStatus = onboardingStatus;
         this.latestAgreementStatus = latestAgreementStatus;
     }
@@ -41,6 +44,7 @@ public class LoginResponse {
         private long expiresInSeconds;
         private String tenantId;
         private String email;
+        private String fullName;
         private OnboardingStatus onboardingStatus;
         private AgreementStatus latestAgreementStatus;
 
@@ -51,6 +55,7 @@ public class LoginResponse {
         public Builder expiresInSeconds(long expiresInSeconds) { this.expiresInSeconds = expiresInSeconds; return this; }
         public Builder tenantId(String tenantId) { this.tenantId = tenantId; return this; }
         public Builder email(String email) { this.email = email; return this; }
+        public Builder fullName(String fullName) { this.fullName = fullName; return this; }
         public Builder onboardingStatus(OnboardingStatus onboardingStatus) { this.onboardingStatus = onboardingStatus; return this; }
         public Builder latestAgreementStatus(AgreementStatus latestAgreementStatus) { this.latestAgreementStatus = latestAgreementStatus; return this; }
 
@@ -61,6 +66,7 @@ public class LoginResponse {
                 expiresInSeconds,
                 tenantId,
                 email,
+                fullName,
                 onboardingStatus,
                 latestAgreementStatus
             );
@@ -72,6 +78,7 @@ public class LoginResponse {
     public long getExpiresInSeconds() { return expiresInSeconds; }
     public String getTenantId() { return tenantId; }
     public String getEmail() { return email; }
+    public String getFullName() { return fullName; }
     public OnboardingStatus getOnboardingStatus() { return onboardingStatus; }
     public AgreementStatus getLatestAgreementStatus() { return latestAgreementStatus; }
 }

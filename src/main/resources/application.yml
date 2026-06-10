@@ -98,7 +98,7 @@ loyalty:
     issuance-audit-enabled: ${LOYALTY_REWARDS_ISSUANCE_AUDIT_ENABLED:true}
     issuance-audit-strict: ${LOYALTY_REWARDS_ISSUANCE_AUDIT_STRICT:false}
     failure-audit-enabled: ${LOYALTY_REWARDS_FAILURE_AUDIT_ENABLED:true}
-    expiry-job-enabled: ${LOYALTY_REWARDS_EXPIRY_JOB_ENABLED:false}
+    expiry-job-enabled: ${LOYALTY_REWARDS_EXPIRY_JOB_ENABLED:true}
     expiry-batch-limit: ${LOYALTY_REWARDS_EXPIRY_BATCH_LIMIT:500}
     expiry-fixed-delay-ms: ${LOYALTY_REWARDS_EXPIRY_FIXED_DELAY_MS:3600000}
     reconciliation-job-enabled: ${LOYALTY_REWARDS_RECONCILIATION_JOB_ENABLED:false}
@@ -132,6 +132,10 @@ loyaltyos:
     expiry-cron: ${LOYALTYOS_VOUCHER_EXPIRY_CRON:0 0 2 * * *}
     auto-issue-from-rules:
       enabled: ${LOYALTYOS_VOUCHER_AUTO_ISSUE_FROM_RULES_ENABLED:true}
+  coupon:
+    enabled: ${LOYALTYOS_COUPON_ENABLED:true}
+    expiry-job-enabled: ${LOYALTYOS_COUPON_EXPIRY_JOB_ENABLED:true}
+    expiry-cron: ${LOYALTYOS_COUPON_EXPIRY_CRON:0 15 2 * * *}
   integration:
     encryption-key: ${INTEGRATION_ENCRYPTION_KEY:}
     rate-limit:
