@@ -1,19 +1,30 @@
 package com.loyaltyos.analytics.repository;
 
+import com.loyaltyos.analytics.dto.BreakageMonthlyRow;
+import com.loyaltyos.analytics.dto.BreakageTierRow;
 import com.loyaltyos.analytics.dto.CohortRetentionRow;
+import com.loyaltyos.analytics.dto.EnrollmentRuleRow;
+import com.loyaltyos.analytics.dto.EnrollmentSourceRow;
+import com.loyaltyos.analytics.dto.EnrollmentSummary;
+import com.loyaltyos.analytics.dto.EnrollmentTrendRow;
+import com.loyaltyos.analytics.dto.ExpirePeriodSummary;
+import com.loyaltyos.analytics.dto.ExpiryJobRunRow;
 import com.loyaltyos.analytics.dto.PointsActivityRow;
 import com.loyaltyos.analytics.dto.RuleEffectivenessRow;
 import com.loyaltyos.analytics.dto.RulePerformanceRow;
 import com.loyaltyos.analytics.dto.SegmentAnalysisRow;
+import com.loyaltyos.analytics.dto.TenantFinanceContext;
 import com.loyaltyos.analytics.dto.TierDistributionRow;
 import com.loyaltyos.analytics.dto.TierUpgradeCohortRow;
 import com.loyaltyos.analytics.dto.TierVelocityBucketRow;
+import com.loyaltyos.analytics.dto.UpcomingExpiryMonthRow;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -505,6 +516,468 @@ public class AnalyticsQueryRepository {
         ));
     }
 
+    public TenantFinanceContext getTenantFinanceContext(String tenantId) {
+        String sql = """
+            SELECT tc.points_currency_rate,
+                   COALESCE(
+                     (SELECT ta.points_currency
+                      FROM tenant_agreements ta
+                      WHERE ta.tenant_id = tc.tenant_id
+                      ORDER BY ta.signed_at DESC
+                      LIMIT 1),
+                     'INR'
+                   ) AS currency
+            FROM tenant_config tc
+            WHERE tc.tenant_id = :tenantId
+            LIMIT 1
+            """;
+        var params = new MapSqlParameterSource("tenantId", tenantId);
+        List<TenantFinanceContext> rows = jdbc.query(
+            sql,
+            params,
+            (rs, i) -> new TenantFinanceContext(
+                rs.getBigDecimal("points_currency_rate"),
+                rs.getString("currency")
+            )
+        );
+        if (rows.isEmpty()) {
+            return new TenantFinanceContext(new BigDecimal("0.010000"), "INR");
+        }
+        return rows.getFirst();
+    }
+
+    public ExpirePeriodSummary getExpirePeriodSummary(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            SELECT COALESCE(SUM(pl.points), 0) AS total_expired,
+                   COUNT(DISTINCT pl.customer_id) AS customers_affected,
+                   COUNT(*) AS transaction_count
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.entry_type = 'EXPIRE'
+              AND pl.created_at >= :fromDate
+              AND pl.created_at < :toDate
+            """.formatted(programmeEq);
+        return jdbc.queryForObject(
+            sql,
+            params,
+            (rs, i) -> new ExpirePeriodSummary(
+                rs.getBigDecimal("total_expired"),
+                rs.getLong("customers_affected"),
+                rs.getLong("transaction_count")
+            )
+        );
+    }
+
+    public BigDecimal getOutstandingPointsLiability(String tenantId, String programmeUid) {
+        var params = tenantProgrammeParams(tenantId, programmeUid);
+        String cbcProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("cbc.programme_uid");
+        String sql = """
+            SELECT COALESCE(SUM(cbc.balance), 0) AS outstanding_points
+            FROM customer_balance_cache cbc
+            WHERE cbc.tenant_id = :tenantId AND %s
+            """.formatted(cbcProgramme);
+        return Optional.ofNullable(
+            jdbc.queryForObject(sql, params, (rs, i) -> rs.getBigDecimal("outstanding_points"))
+        ).orElse(BigDecimal.ZERO);
+    }
+
+    public BigDecimal getUpcomingExpiryPoints(String tenantId, String programmeUid, int withinDays) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("withinDays", withinDays);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            SELECT COALESCE(SUM(pl.points), 0) AS points_expiring
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.entry_type = 'CREDIT'
+              AND pl.expires_at IS NOT NULL
+              AND pl.expires_at > NOW()
+              AND pl.expires_at <= DATE_ADD(NOW(), INTERVAL :withinDays DAY)
+              AND %s
+            """.formatted(programmeEq, creditNotYetExpiredSql("pl"));
+        return Optional.ofNullable(
+            jdbc.queryForObject(sql, params, (rs, i) -> rs.getBigDecimal("points_expiring"))
+        ).orElse(BigDecimal.ZERO);
+    }
+
+    public List<BreakageMonthlyRow> getMonthlyBreakage(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            SELECT DATE_FORMAT(pl.created_at, '%%Y-%%m') AS report_month,
+                   COALESCE(SUM(pl.points), 0) AS expired_points,
+                   COUNT(DISTINCT pl.customer_id) AS customers_affected,
+                   COUNT(*) AS transaction_count
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.entry_type = 'EXPIRE'
+              AND pl.created_at >= :fromDate
+              AND pl.created_at < :toDate
+            GROUP BY report_month
+            ORDER BY report_month ASC
+            """.formatted(programmeEq);
+        return jdbc.query(sql, params, (rs, i) -> new BreakageMonthlyRow(
+            rs.getString("report_month"),
+            rs.getBigDecimal("expired_points"),
+            rs.getLong("customers_affected"),
+            rs.getLong("transaction_count")
+        ));
+    }
+
+    public List<BreakageTierRow> getBreakageByTier(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String cbcProgrammeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("cbc.programme_uid");
+        String tdScope = AnalyticsProgrammeSql.programmeScope("td");
+        String td2Scope = AnalyticsProgrammeSql.programmeScope("td2");
+        String sql = """
+            WITH expired_by_customer AS (
+              SELECT pl.customer_id, SUM(pl.points) AS expired_points
+              FROM points_ledger pl
+              WHERE pl.tenant_id = :tenantId
+                AND %s
+                AND pl.entry_type = 'EXPIRE'
+                AND pl.created_at >= :fromDate
+                AND pl.created_at < :toDate
+              GROUP BY pl.customer_id
+            )
+            SELECT
+              COALESCE(td.name, 'Unassigned') AS tier_name,
+              COALESCE(td.rank_order, 9999) AS rank_order,
+              SUM(e.expired_points) AS expired_points,
+              COUNT(DISTINCT e.customer_id) AS customers_affected
+            FROM expired_by_customer e
+            LEFT JOIN customer_balance_cache cbc
+                   ON cbc.tenant_id = :tenantId
+                  AND %s
+                  AND cbc.customer_id = e.customer_id
+            LEFT JOIN tier_definitions td
+                   ON td.tenant_id = :tenantId
+                  AND %s
+                  AND cbc.balance >= td.entry_threshold
+                  AND cbc.balance < COALESCE(
+                        (SELECT MIN(td2.entry_threshold)
+                         FROM tier_definitions td2
+                         WHERE td2.tenant_id = td.tenant_id
+                           AND %s
+                           AND td2.rank_order > td.rank_order),
+                        999999999)
+            GROUP BY COALESCE(td.name, 'Unassigned'), COALESCE(td.rank_order, 9999)
+            ORDER BY rank_order ASC
+            """.formatted(programmeEq, cbcProgrammeEq, tdScope, td2Scope);
+        return jdbc.query(sql, params, (rs, i) -> new BreakageTierRow(
+            rs.getString("tier_name"),
+            rs.getInt("rank_order"),
+            rs.getBigDecimal("expired_points"),
+            rs.getLong("customers_affected")
+        ));
+    }
+
+    public List<UpcomingExpiryMonthRow> getUpcomingExpiryByMonth(
+        String tenantId,
+        String programmeUid,
+        int horizonMonths
+    ) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("horizonMonths", horizonMonths);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            SELECT DATE_FORMAT(pl.expires_at, '%%Y-%%m') AS expiry_month,
+                   COALESCE(SUM(pl.points), 0) AS points_expiring,
+                   COUNT(DISTINCT pl.customer_id) AS customers_affected
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.entry_type = 'CREDIT'
+              AND pl.expires_at IS NOT NULL
+              AND pl.expires_at > NOW()
+              AND pl.expires_at <= DATE_ADD(NOW(), INTERVAL :horizonMonths MONTH)
+              AND %s
+            GROUP BY expiry_month
+            ORDER BY expiry_month ASC
+            """.formatted(programmeEq, creditNotYetExpiredSql("pl"));
+        return jdbc.query(sql, params, (rs, i) -> new UpcomingExpiryMonthRow(
+            rs.getString("expiry_month"),
+            rs.getBigDecimal("points_expiring"),
+            rs.getLong("customers_affected")
+        ));
+    }
+
+    public List<ExpiryJobRunRow> getRecentExpiryJobRuns(String tenantId, String programmeUid, int limit) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("limit", limit);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        // One row per calendar day of tenant EXPIRE ledger activity (not per platform job run).
+        String sql = """
+            SELECT DATE_FORMAT(daily.day_bucket, '%%Y-%%m-%%d') AS batch_date,
+                   'SUCCESS' AS status,
+                   daily.total_expired,
+                   daily.customers_affected,
+                   DATE_FORMAT(daily.last_executed_at, '%%Y-%%m-%%d %%H:%%i') AS executed_at
+            FROM (
+              SELECT DATE(pl.created_at) AS day_bucket,
+                     SUM(pl.points) AS total_expired,
+                     COUNT(DISTINCT pl.customer_id) AS customers_affected,
+                     MAX(pl.created_at) AS last_executed_at
+              FROM points_ledger pl
+              WHERE pl.tenant_id = :tenantId
+                AND %s
+                AND pl.entry_type = 'EXPIRE'
+              GROUP BY DATE(pl.created_at)
+            ) daily
+            ORDER BY daily.day_bucket DESC
+            LIMIT :limit
+            """.formatted(programmeEq);
+        return jdbc.query(sql, params, (rs, i) -> new ExpiryJobRunRow(
+            rs.getString("batch_date"),
+            rs.getString("status"),
+            getNullablePointsLong(rs, "total_expired"),
+            getNullableLong(rs, "customers_affected"),
+            rs.getString("executed_at")
+        ));
+    }
+
+    public EnrollmentSummary getEnrollmentSummary(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        LocalDate priorFrom,
+        LocalDate ytdStart
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to)
+            .addValue("priorFromDate", priorFrom.atStartOfDay())
+            .addValue("ytdStartDate", ytdStart.atStartOfDay());
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String plProgrammeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            WITH %s
+            SELECT
+              (SELECT COUNT(*)
+               FROM enrolled e
+               WHERE e.enrolled_at >= :fromDate AND e.enrolled_at < :toDate) AS new_in_period,
+              (SELECT COUNT(*)
+               FROM enrolled e
+               WHERE e.enrolled_at >= :priorFromDate AND e.enrolled_at < :fromDate) AS new_prior,
+              (SELECT COUNT(*) FROM enrolled) AS total_enrolled,
+              (SELECT COUNT(*)
+               FROM enrolled e
+               WHERE e.enrolled_at < :fromDate
+                 AND EXISTS (
+                   SELECT 1
+                   FROM points_ledger pl
+                   WHERE pl.tenant_id = :tenantId
+                     AND %s
+                     AND pl.customer_id = e.customer_id
+                     AND pl.created_at >= :fromDate
+                     AND pl.created_at < :toDate
+                 )) AS returning_active,
+              (SELECT COUNT(*)
+               FROM enrolled e
+               WHERE e.enrolled_at >= :ytdStartDate AND e.enrolled_at < :toDate) AS new_ytd
+            """.formatted(firstCreditEnrolledCte(programmeEq), plProgrammeEq);
+        return jdbc.queryForObject(
+            sql,
+            params,
+            (rs, i) -> new EnrollmentSummary(
+                rs.getLong("new_in_period"),
+                rs.getLong("new_prior"),
+                rs.getLong("total_enrolled"),
+                rs.getLong("returning_active"),
+                rs.getLong("new_ytd")
+            )
+        );
+    }
+
+    public List<EnrollmentTrendRow> getDailyNewEnrollments(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            WITH %s
+            SELECT DATE_FORMAT(daily.day_bucket, '%%Y-%%m-%%d') AS period,
+                   daily.new_enrollments
+            FROM (
+              SELECT DATE(e.enrolled_at) AS day_bucket,
+                     COUNT(*) AS new_enrollments
+              FROM enrolled e
+              WHERE e.enrolled_at >= :fromDate AND e.enrolled_at < :toDate
+              GROUP BY DATE(e.enrolled_at)
+            ) daily
+            ORDER BY daily.day_bucket ASC
+            """.formatted(firstCreditEnrolledCte(programmeEq));
+        return jdbc.query(sql, params, (rs, i) -> new EnrollmentTrendRow(
+            rs.getString("period"),
+            rs.getLong("new_enrollments")
+        ));
+    }
+
+    public List<EnrollmentTrendRow> getMonthlyNewEnrollments(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            WITH %s
+            SELECT monthly.period,
+                   monthly.new_enrollments
+            FROM (
+              SELECT DATE_FORMAT(e.enrolled_at, '%%Y-%%m') AS period,
+                     COUNT(*) AS new_enrollments
+              FROM enrolled e
+              WHERE e.enrolled_at >= :fromDate AND e.enrolled_at < :toDate
+              GROUP BY DATE_FORMAT(e.enrolled_at, '%%Y-%%m')
+            ) monthly
+            ORDER BY monthly.period ASC
+            """.formatted(firstCreditEnrolledCte(programmeEq));
+        return jdbc.query(sql, params, (rs, i) -> new EnrollmentTrendRow(
+            rs.getString("period"),
+            rs.getLong("new_enrollments")
+        ));
+    }
+
+    public List<EnrollmentSourceRow> getEnrollmentsBySource(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String referralProgrammeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("r.programme_uid");
+        String sql = """
+            WITH %s
+            SELECT source_type,
+                   COUNT(*) AS new_enrollments
+            FROM (
+              SELECT e.customer_id,
+                     CASE
+                       WHEN EXISTS (
+                         SELECT 1
+                         FROM referrals r
+                         WHERE r.tenant_id = :tenantId
+                           AND %s
+                           AND r.referee_customer_id = e.customer_id
+                       ) THEN 'REFERRAL'
+                       WHEN e.source_campaign_id IS NOT NULL
+                         AND TRIM(e.source_campaign_id) <> '' THEN 'CAMPAIGN'
+                       WHEN e.source_rule_id IS NOT NULL THEN 'EARN_RULE'
+                       ELSE 'DIRECT'
+                     END AS source_type
+              FROM enrolled e
+              WHERE e.enrolled_at >= :fromDate AND e.enrolled_at < :toDate
+            ) src
+            GROUP BY source_type
+            ORDER BY new_enrollments DESC
+            """.formatted(firstCreditEnrolledCte(programmeEq), referralProgrammeEq);
+        return jdbc.query(sql, params, (rs, i) -> new EnrollmentSourceRow(
+            rs.getString("source_type"),
+            rs.getLong("new_enrollments")
+        ));
+    }
+
+    public List<EnrollmentRuleRow> getTopEnrollmentRules(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        int limit
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to)
+            .addValue("limit", limit);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String erProgramme = AnalyticsProgrammeSql.programmeScope("er");
+        String sql = """
+            WITH %s
+            SELECT er.rule_uid,
+                   er.name AS rule_name,
+                   COUNT(*) AS new_enrollments
+            FROM enrolled e
+            JOIN earn_rules er
+              ON er.id = e.source_rule_id
+             AND er.tenant_id = :tenantId
+             AND %s
+            WHERE e.enrolled_at >= :fromDate
+              AND e.enrolled_at < :toDate
+              AND e.source_rule_id IS NOT NULL
+            GROUP BY er.rule_uid, er.name
+            ORDER BY new_enrollments DESC
+            LIMIT :limit
+            """.formatted(firstCreditEnrolledCte(programmeEq), erProgramme);
+        return jdbc.query(sql, params, (rs, i) -> new EnrollmentRuleRow(
+            rs.getString("rule_uid"),
+            rs.getString("rule_name"),
+            rs.getLong("new_enrollments")
+        ));
+    }
+
+    /**
+     * First CREDIT row per customer — proxy for programme enrollment (no separate enrolment table).
+     */
+    private static String firstCreditEnrolledCte(String programmeEqPl) {
+        return """
+            first_credit AS (
+              SELECT pl.customer_id,
+                     pl.created_at AS enrolled_at,
+                     pl.source_rule_id,
+                     pl.source_campaign_id,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY pl.customer_id
+                       ORDER BY pl.created_at ASC, pl.id ASC
+                     ) AS rn
+              FROM points_ledger pl
+              WHERE pl.tenant_id = :tenantId
+                AND %s
+                AND pl.entry_type = 'CREDIT'
+            ),
+            enrolled AS (
+              SELECT customer_id, enrolled_at, source_rule_id, source_campaign_id
+              FROM first_credit
+              WHERE rn = 1
+            )
+            """.formatted(programmeEqPl);
+    }
+
+    /** CREDIT rows that have not yet produced an EXPIRE ledger entry. */
+    private static String creditNotYetExpiredSql(String creditAlias) {
+        return """
+            NOT EXISTS (
+              SELECT 1
+              FROM points_ledger ex
+              WHERE ex.tenant_id = %s.tenant_id
+                AND ex.customer_id = %s.customer_id
+                AND ex.idempotency_key = CONCAT('exp:', %s.id)
+            )
+            """.formatted(creditAlias, creditAlias, creditAlias);
+    }
+
     private SegmentAnalysisRow mapSegmentRow(ResultSet rs, int rowNum) throws SQLException {
         String label = rs.getString("segment");
         if (label == null) {
@@ -551,5 +1024,15 @@ public class AnalyticsQueryRepository {
     private static Double getNullableDouble(ResultSet rs, String column) throws SQLException {
         double v = rs.getDouble(column);
         return rs.wasNull() ? null : v;
+    }
+
+    private static Long getNullableLong(ResultSet rs, String column) throws SQLException {
+        long v = rs.getLong(column);
+        return rs.wasNull() ? null : v;
+    }
+
+    private static Long getNullablePointsLong(ResultSet rs, String column) throws SQLException {
+        BigDecimal v = rs.getBigDecimal(column);
+        return v == null ? null : v.longValue();
     }
 }

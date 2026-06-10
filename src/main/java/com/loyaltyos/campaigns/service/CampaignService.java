@@ -403,7 +403,7 @@ public class CampaignService {
         c.setTriggerEventType(triggerTypes);
         programmeValidator.validateTriggerEventType(c.getTenantId(), c.getProgrammeUid(), triggerTypes);
         Campaign saved = campaignRepository.save(c);
-        return toResponse(saved, exceedsThreshold(saved.getBudgetTotal()));
+        return toResponse(saved);
     }
 
     private Campaign loadCampaign(String tenantId, String campaignUid) {
@@ -552,7 +552,19 @@ public class CampaignService {
         r.setCustomerScope(c.getCustomerScope() != null ? c.getCustomerScope() : CustomerScope.ALL);
         r.setCustomerCount(c.getCustomerCount() != null ? c.getCustomerCount() : 0);
         r.setExecutionMode(c.getExecutionMode() != null ? c.getExecutionMode() : CampaignExecutionMode.RULE_GATED);
+        r.setBudgetExceedsApprovalThreshold(exceedsThreshold(c.getBudgetTotal()));
         return r;
+    }
+
+    private boolean exceedsThreshold(BigDecimal budgetTotal) {
+        if (budgetTotal == null) {
+            return false;
+        }
+        BigDecimal threshold = campaignProperties.getApprovalBudgetThreshold();
+        if (threshold == null) {
+            return false;
+        }
+        return budgetTotal.compareTo(threshold) > 0;
     }
 
     private static String defaultProgrammeUid(String programmeUid) {

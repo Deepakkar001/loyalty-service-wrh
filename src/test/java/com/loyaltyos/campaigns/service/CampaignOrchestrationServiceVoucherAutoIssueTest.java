@@ -14,10 +14,11 @@ import com.loyaltyos.campaigns.dto.LoyaltyEventProcessResponse;
 import com.loyaltyos.campaigns.model.CampaignBuiltAward;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignResolutionLogRepository;
+import com.loyaltyos.analytics.service.CustomerTierOutcomeResolver;
 import com.loyaltyos.onboarding.service.ProgrammeService;
-import com.loyaltyos.rewards.config.RewardEngineProperties;
 import com.loyaltyos.rewards.dto.RewardBalanceResponse;
 import com.loyaltyos.rewards.dto.RewardIssueResponse;
+import com.loyaltyos.rewards.service.ProgrammeCreditExpiryResolver;
 import com.loyaltyos.rewards.service.RewardIssuanceService;
 import com.loyaltyos.rules.dto.RuleEvaluateRequest;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
@@ -53,7 +54,8 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
     @Mock private RuleEvaluationService ruleEvaluationService;
     @Mock private RuleEarningCapService ruleEarningCapService;
     @Mock private RewardIssuanceService rewardIssuanceService;
-    @Mock private RewardEngineProperties rewardEngineProperties;
+    @Mock private ProgrammeCreditExpiryResolver creditExpiryResolver;
+    @Mock private CustomerTierOutcomeResolver customerTierOutcomeResolver;
     @Mock private CampaignJsonSupport jsonSupport;
     @Mock private CampaignParticipationRepository participationRepository;
     @Mock private CampaignResolutionLogRepository resolutionLogRepository;
@@ -72,6 +74,13 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
             .thenReturn(org.mockito.Mockito.mock(TransactionStatus.class));
         lenient().doAnswer(invocation -> null).when(transactionManager).commit(any());
         lenient().doAnswer(invocation -> null).when(transactionManager).rollback(any());
+        lenient().when(creditExpiryResolver.resolveExpiresAtForCustomer(any(), any(), any(), any(), any()))
+            .thenReturn(null);
+        lenient().when(customerTierOutcomeResolver.resolve(any(), any(), any(), any(), any()))
+            .thenReturn(new com.loyaltyos.analytics.model.CustomerTierOutcome(null, null, null, null, false));
+        RewardBalanceResponse defaultBalance = new RewardBalanceResponse();
+        defaultBalance.setBalance(BigDecimal.ZERO);
+        lenient().when(rewardIssuanceService.getBalance(any(), any(), any())).thenReturn(defaultBalance);
 
         service = new CampaignOrchestrationService(
             campaignProperties,
@@ -85,7 +94,8 @@ class CampaignOrchestrationServiceVoucherAutoIssueTest {
             ruleEvaluationService,
             ruleEarningCapService,
             rewardIssuanceService,
-            rewardEngineProperties,
+            creditExpiryResolver,
+            customerTierOutcomeResolver,
             jsonSupport,
             participationRepository,
             campaignRepository,

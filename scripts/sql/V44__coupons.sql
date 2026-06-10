@@ -1,0 +1,58 @@
+-- Marketing coupon module (BRD §4.10). Separate from voucher_inventory (§4.12).
+-- Run manually when JPA_DDL_AUTO=validate.
+
+CREATE TABLE IF NOT EXISTS coupons (
+  id                          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  coupon_uid                  VARCHAR(128) NOT NULL,
+  tenant_id                   VARCHAR(64) NOT NULL,
+  programme_uid               VARCHAR(64) NOT NULL DEFAULT 'default',
+  name                        VARCHAR(255) NOT NULL,
+  description                 TEXT,
+  coupon_code                 VARCHAR(64) NOT NULL,
+  coupon_type                 ENUM('FIXED_DISCOUNT','PCT_DISCOUNT','FREE_ITEM','CASHBACK','POINTS_BONUS') NOT NULL,
+  discount_value              DECIMAL(18, 4),
+  discount_pct                DECIMAL(8, 4),
+  status                      ENUM('DRAFT','ACTIVE','EXPIRED','REVOKED','EXHAUSTED') NOT NULL DEFAULT 'DRAFT',
+  usage_type                  ENUM('SINGLE_USE','MULTI_USE') NOT NULL DEFAULT 'SINGLE_USE',
+  max_redemptions             INT NOT NULL DEFAULT 1,
+  redemption_count            INT NOT NULL DEFAULT 0,
+  max_redemptions_per_customer INT NOT NULL DEFAULT 1,
+  is_stackable                TINYINT(1) NOT NULL DEFAULT 0,
+  target_customer_id          VARCHAR(128),
+  campaign_uid                VARCHAR(128),
+  valid_from                  DATETIME(6),
+  valid_until                 DATETIME(6) NOT NULL,
+  constraints_json            JSON,
+  created_by                  VARCHAR(255),
+  created_at                  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at                  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_coupon_uid (coupon_uid),
+  UNIQUE KEY uk_tenant_code (tenant_id, coupon_code),
+  KEY idx_tenant_programme_status (tenant_id, programme_uid, status),
+  KEY idx_tenant_customer (tenant_id, target_customer_id),
+  KEY idx_valid_until (status, valid_until),
+  KEY idx_campaign (tenant_id, campaign_uid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id                          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  redemption_uid              VARCHAR(128) NOT NULL,
+  tenant_id                   VARCHAR(64) NOT NULL,
+  programme_uid               VARCHAR(64) NOT NULL DEFAULT 'default',
+  coupon_uid                  VARCHAR(128) NOT NULL,
+  coupon_code                 VARCHAR(64) NOT NULL,
+  customer_id                 VARCHAR(128) NOT NULL,
+  order_id                    VARCHAR(128) NOT NULL,
+  channel                     VARCHAR(64),
+  order_amount                DECIMAL(18, 4),
+  discount_amount             DECIMAL(18, 4),
+  points_credited             DECIMAL(18, 4),
+  ledger_id                   BIGINT UNSIGNED,
+  status                      ENUM('REDEEMED','REVERSED') NOT NULL DEFAULT 'REDEEMED',
+  metadata_json               JSON,
+  redeemed_at                 DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_redemption_uid (redemption_uid),
+  UNIQUE KEY uk_tenant_order_coupon (tenant_id, order_id, coupon_code),
+  KEY idx_tenant_coupon (tenant_id, coupon_uid, redeemed_at),
+  KEY idx_tenant_customer (tenant_id, customer_id, redeemed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

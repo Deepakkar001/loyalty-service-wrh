@@ -81,16 +81,21 @@ public class IntegrationEventService {
             if (fromCache.isPresent()) {
                 return buildIdempotentReplay(parsed.eventId(), fromCache.get());
             }
-            EventProcessingResponse rebuilt = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
+            EventProcessingResponse rebuilt = responseMapper.toSuccessResponse(
+                parsed, core, core.getRuleEvaluation(), processingTimeMs
+            );
             idempotencyService.cacheResponse(tenantId, parsed.eventId(), rebuilt);
             return buildIdempotentReplay(parsed.eventId(), rebuilt);
         }
 
         if (!core.isSuccess()) {
-            EventProcessingResponse failure = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
+            EventProcessingResponse failure = responseMapper.toSuccessResponse(
+                parsed, core, core.getRuleEvaluation(), processingTimeMs
+            );
             failure.setStatus("ERROR");
             persistProcessingLog(
-                tenantId, parsed, apiKeyUid, core, failure, requestPayloadHash, processingTimeMs, null
+                tenantId, parsed, apiKeyUid, core, failure, requestPayloadHash, processingTimeMs,
+                core.getRuleEvaluation()
             );
             throw new IntegrationApiException(
                 HttpStatus.BAD_REQUEST,
@@ -100,10 +105,12 @@ public class IntegrationEventService {
             );
         }
 
-        EventProcessingResponse response = responseMapper.toSuccessResponse(parsed, core, null, processingTimeMs);
+        EventProcessingResponse response = responseMapper.toSuccessResponse(
+            parsed, core, core.getRuleEvaluation(), processingTimeMs
+        );
         persistProcessingLog(
             tenantId, parsed, apiKeyUid, core, response, requestPayloadHash,
-            processingTimeMs, null
+            processingTimeMs, core.getRuleEvaluation()
         );
         idempotencyService.cacheResponse(tenantId, parsed.eventId(), response);
         return response;
@@ -270,7 +277,13 @@ public class IntegrationEventService {
         log.setTierMultiplier(ruleEval != null && ruleEval.getTierMultiplier() != null
             ? ruleEval.getTierMultiplier() : BigDecimal.ONE);
         log.setTotalPointsAwarded(core.getTotalPointsAwarded());
+        log.setPreviousBalance(core.getPreviousBalance());
         log.setNewBalance(core.getNewBalance());
+        if (response.getCustomer() != null) {
+            log.setTierBefore(response.getCustomer().getTierBefore());
+            log.setTierAfter(response.getCustomer().getTierAfter());
+            log.setTierChanged(response.getCustomer().isTierChanged());
+        }
         log.setCampaignsEligibleCount(core.getCampaignsApplied() != null ? core.getCampaignsApplied().size() : 0);
         log.setCampaignBonusPoints(core.getCampaignPointsAwarded());
         log.setProcessingTimeMs(processingTimeMs);

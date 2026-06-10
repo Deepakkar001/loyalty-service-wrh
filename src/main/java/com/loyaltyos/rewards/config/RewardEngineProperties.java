@@ -27,7 +27,7 @@ public class RewardEngineProperties {
     private int reconciliationCustomerBatchLimit = 200;
 
     /**
-     * Months from issuance {@code Instant} until {@code expires_at} on new CREDIT rows.
+     * Fallback months from issuance until {@code expires_at} when programme config has no {@code expiry} section.
      * When {@code <= 0}, credits do not expire via time (column left null).
      */
     private int defaultCreditExpiryMonths = 24;

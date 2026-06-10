@@ -1,16 +1,25 @@
 package com.loyaltyos.referrals.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.loyaltyos.referrals.dto.ReferralEffectivenessReportResponse;
+import com.loyaltyos.referrals.dto.ReferralFunnelStageRow;
+import com.loyaltyos.referrals.dto.ReferralPeriodMetrics;
 import com.loyaltyos.referrals.dto.ReferralTimeToPurchaseResponse;
 import com.loyaltyos.referrals.dto.ReferralTopReferrerResponse;
 import com.loyaltyos.referrals.dto.ReferralTrendPointResponse;
 import com.loyaltyos.referrals.entity.Referral;
 import com.loyaltyos.referrals.enums.ReferralStatus;
+import com.loyaltyos.referrals.repository.ReferralAnalyticsQueryRepository;
 import com.loyaltyos.referrals.repository.ReferralRepository;
+import com.loyaltyos.analytics.dto.TenantFinanceContext;
+import com.loyaltyos.analytics.repository.AnalyticsQueryRepository;
 import com.loyaltyos.referrals.support.ReferralProgressTracker;
 import com.loyaltyos.referrals.support.ReferralProgressTracker.ProgressState;
 import com.loyaltyos.referrals.support.ReferralProgressTracker.PurchaseEvent;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -31,11 +40,102 @@ public class ReferralAnalyticsService {
     private static final DateTimeFormatter DAY_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
 
     private final ReferralRepository referralRepository;
+    private final ReferralAnalyticsQueryRepository analyticsQueryRepository;
+    private final AnalyticsQueryRepository tenantFinanceRepository;
     private final ObjectMapper objectMapper;
 
-    public ReferralAnalyticsService(ReferralRepository referralRepository, ObjectMapper objectMapper) {
+    public ReferralAnalyticsService(
+        ReferralRepository referralRepository,
+        ReferralAnalyticsQueryRepository analyticsQueryRepository,
+        AnalyticsQueryRepository tenantFinanceRepository,
+        ObjectMapper objectMapper
+    ) {
         this.referralRepository = Objects.requireNonNull(referralRepository, "referralRepository");
+        this.analyticsQueryRepository = Objects.requireNonNull(analyticsQueryRepository, "analyticsQueryRepository");
+        this.tenantFinanceRepository = Objects.requireNonNull(tenantFinanceRepository, "tenantFinanceRepository");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+    }
+
+    @Transactional(readOnly = true)
+    public ReferralEffectivenessReportResponse buildEffectivenessReport(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        String programme = normalize(programmeUid);
+        long periodDays = ChronoUnit.DAYS.between(from, to) + 1;
+        LocalDate priorFrom = from.minusDays(periodDays);
+        LocalDate priorTo = from.minusDays(1);
+
+        ReferralPeriodMetrics period = analyticsQueryRepository.getPeriodMetrics(tenantId, programme, from, to);
+        ReferralPeriodMetrics prior = analyticsQueryRepository.getPeriodMetrics(tenantId, programme, priorFrom, priorTo);
+
+        TenantFinanceContext finance = tenantFinanceRepository.getTenantFinanceContext(tenantId);
+        BigDecimal pointsRate = finance.pointsCurrencyRate() == null ? new BigDecimal("0.01") : finance.pointsCurrencyRate();
+        BigDecimal rewardCostCurrency = period.totalRewardPoints().multiply(pointsRate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal revenuePerReward = rewardCostCurrency.signum() > 0
+            ? period.totalRefereeSpend().divide(rewardCostCurrency, 2, RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        BigDecimal netValue = period.totalRefereeSpend().subtract(rewardCostCurrency);
+        BigDecimal avgPointsPerRewarded = period.rewarded() > 0
+            ? period.totalRewardPoints().divide(BigDecimal.valueOf(period.rewarded()), 2, RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+
+        ReferralEffectivenessReportResponse report = new ReferralEffectivenessReportResponse();
+        report.setProgrammeUid(programme);
+        report.setFromDate(from.toString());
+        report.setToDate(to.toString());
+        report.setCurrency(finance.currency());
+        report.setPeriodMetrics(period);
+        report.setPriorPeriodMetrics(prior);
+        report.setPeriodOverPeriodReferralsChangePct(percentChange(period.totalReferrals(), prior.totalReferrals()));
+        report.setPeriodOverPeriodRewardedChangePct(percentChange(period.rewarded(), prior.rewarded()));
+        report.setPeriodOverPeriodConversionChangePts(
+            period.conversionRatePercent().subtract(prior.conversionRatePercent()).setScale(1, RoundingMode.HALF_UP)
+        );
+        report.setRewardCostInCurrency(rewardCostCurrency);
+        report.setRevenuePerRewardCurrency(revenuePerReward);
+        report.setNetRefereeValue(netValue);
+        report.setAvgPointsPerRewardedReferral(avgPointsPerRewarded);
+        report.setCostPerRewardedReferralPoints(avgPointsPerRewarded);
+        report.setTimeToFirstPurchase(timeToFirstPurchase(tenantId, programme));
+        report.setFunnel(buildFunnel(period));
+        report.setDailyTrends(analyticsQueryRepository.getDailyTrends(tenantId, programme, from, to));
+        report.setTopReferrers(analyticsQueryRepository.getTopReferrersInPeriod(tenantId, programme, from, to, 15));
+        report.setProgrammeComparisons(analyticsQueryRepository.getProgrammeComparisons(tenantId, from, to));
+        return report;
+    }
+
+    private static List<ReferralFunnelStageRow> buildFunnel(ReferralPeriodMetrics period) {
+        long total = period.totalReferrals();
+        List<ReferralFunnelStageRow> funnel = new ArrayList<>();
+        funnel.add(stage("Pending", period.pending(), total));
+        funnel.add(stage("Signed up", period.signedUp(), total));
+        funnel.add(stage("Rewarded", period.rewarded(), total));
+        funnel.add(stage("With purchase", period.withPurchase(), total));
+        funnel.add(stage("Fraud flagged", period.fraudFlagged(), total));
+        funnel.add(stage("Rejected", period.rejected(), total));
+        return funnel;
+    }
+
+    private static ReferralFunnelStageRow stage(String name, long count, long total) {
+        ReferralFunnelStageRow row = new ReferralFunnelStageRow();
+        row.setStage(name);
+        row.setCount(count);
+        row.setSharePercent(total > 0
+            ? BigDecimal.valueOf(count).multiply(new BigDecimal("100")).divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP)
+            : BigDecimal.ZERO);
+        return row;
+    }
+
+    private static BigDecimal percentChange(long current, long prior) {
+        if (prior <= 0) {
+            return current > 0 ? null : BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(current - prior)
+            .multiply(new BigDecimal("100"))
+            .divide(BigDecimal.valueOf(prior), 1, RoundingMode.HALF_UP);
     }
 
     @Transactional(readOnly = true)

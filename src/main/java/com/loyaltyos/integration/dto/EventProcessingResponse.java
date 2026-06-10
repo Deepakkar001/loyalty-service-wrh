@@ -21,7 +21,9 @@ public class EventProcessingResponse {
 
     public static class CustomerInfo {
         private String customerId;
+        /** Human-readable tier name before earn (e.g. Silver). */
         private String tierBefore;
+        /** Human-readable tier name after earn. */
         private String tierAfter;
         private boolean tierChanged;
 

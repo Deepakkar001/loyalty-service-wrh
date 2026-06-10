@@ -16,7 +16,6 @@ import com.loyaltyos.rules.entity.EarnRule;
 import com.loyaltyos.rules.entity.PointsLedger;
 import com.loyaltyos.rules.enums.LedgerEntryType;
 import com.loyaltyos.rules.repository.EarnRuleRepository;
-import com.loyaltyos.rewards.config.RewardEngineProperties;
 import com.loyaltyos.rewards.dto.RewardIssueCommandDto;
 import com.loyaltyos.rewards.dto.RewardIssueRequest;
 import com.loyaltyos.rewards.dto.RewardIssueResponse;
@@ -51,7 +50,7 @@ class RewardIssuanceServiceTest {
     private RewardIssuanceAuditService rewardIssuanceAuditService;
 
     @Mock
-    private RewardEngineProperties rewardEngineProperties;
+    private ProgrammeCreditExpiryResolver creditExpiryResolver;
 
     @Mock
     private TierResolver tierResolver;
@@ -66,7 +65,10 @@ class RewardIssuanceServiceTest {
     void setUp() {
         lenient().when(earnRuleRepository.findByTenantIdAndProgrammeUidAndRuleUid("t1", "default", "rule-a"))
             .thenReturn(Optional.of(mockRule(10L, "rule-a")));
-        lenient().when(rewardEngineProperties.getDefaultCreditExpiryMonths()).thenReturn(24);
+        lenient().when(creditExpiryResolver.resolveExpiresAt(eq("t1"), eq("default"), any(), any()))
+            .thenReturn(null);
+        lenient().when(tierResolver.resolveTierForBalance(eq("t1"), eq("default"), any()))
+            .thenReturn(Optional.empty());
     }
 
     private static EarnRule mockRule(long id, String uid) {

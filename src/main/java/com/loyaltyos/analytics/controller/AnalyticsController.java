@@ -8,7 +8,11 @@ import com.loyaltyos.analytics.dto.SegmentAnalysisRow;
 import com.loyaltyos.analytics.dto.TierDistributionRow;
 import com.loyaltyos.analytics.dto.TierUpgradeCohortRow;
 import com.loyaltyos.analytics.dto.TierVelocityBucketRow;
+import com.loyaltyos.analytics.dto.BreakageExpiryReportResponse;
+import com.loyaltyos.analytics.dto.EnrollmentReportResponse;
 import com.loyaltyos.analytics.service.AnalyticsService;
+import com.loyaltyos.analytics.service.BreakageExpiryReportService;
+import com.loyaltyos.analytics.service.EnrollmentReportService;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,9 +34,49 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final BreakageExpiryReportService breakageExpiryReportService;
+    private final EnrollmentReportService enrollmentReportService;
 
-    public AnalyticsController(AnalyticsService analyticsService) {
+    public AnalyticsController(
+        AnalyticsService analyticsService,
+        BreakageExpiryReportService breakageExpiryReportService,
+        EnrollmentReportService enrollmentReportService
+    ) {
         this.analyticsService = Objects.requireNonNull(analyticsService, "analyticsService");
+        this.breakageExpiryReportService = Objects.requireNonNull(
+            breakageExpiryReportService,
+            "breakageExpiryReportService"
+        );
+        this.enrollmentReportService = Objects.requireNonNull(
+            enrollmentReportService,
+            "enrollmentReportService"
+        );
+    }
+
+    @GetMapping("/reports/enrollment")
+    @Operation(summary = "Member enrollment and acquisition report")
+    public ResponseEntity<EnrollmentReportResponse> enrollmentReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            enrollmentReportService.buildReport(TenantJwt.tenantId(jwt), programmeUid, from, to)
+        );
+    }
+
+    @GetMapping("/reports/breakage-expiry")
+    @Operation(summary = "Breakage and point expiry finance report")
+    public ResponseEntity<BreakageExpiryReportResponse> breakageExpiryReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            breakageExpiryReportService.buildReport(TenantJwt.tenantId(jwt), programmeUid, from, to)
+        );
     }
 
     @GetMapping("/points-activity")

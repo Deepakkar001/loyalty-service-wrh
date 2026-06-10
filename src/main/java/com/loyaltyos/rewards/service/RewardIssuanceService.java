@@ -2,6 +2,7 @@ package com.loyaltyos.rewards.service;
 
 import com.loyaltyos.analytics.service.TierHistoryService;
 import com.loyaltyos.analytics.service.TierResolver;
+import com.loyaltyos.onboarding.entity.TierDefinition;
 import com.loyaltyos.rules.entity.EarnRule;
 import com.loyaltyos.rules.entity.PointsLedger;
 import com.loyaltyos.rules.enums.ActionType;
@@ -11,7 +12,6 @@ import com.loyaltyos.rewards.dto.RewardBalanceResponse;
 import com.loyaltyos.rewards.dto.RewardIssueCommandDto;
 import com.loyaltyos.rewards.dto.RewardIssueRequest;
 import com.loyaltyos.rewards.dto.RewardIssueResponse;
-import com.loyaltyos.rewards.config.RewardEngineProperties;
 import com.loyaltyos.rewards.entity.CustomerBalanceCache;
 import com.loyaltyos.rewards.entity.CustomerBalanceCacheId;
 import com.loyaltyos.rewards.exception.RewardIssuanceValidationException;
@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,7 +42,7 @@ public class RewardIssuanceService {
     private final CustomerBalanceCacheRepository balanceCacheRepository;
     private final EarnRuleRepository earnRuleRepository;
     private final RewardIssuanceAuditService rewardIssuanceAuditService;
-    private final RewardEngineProperties rewardEngineProperties;
+    private final ProgrammeCreditExpiryResolver creditExpiryResolver;
     private final TierResolver tierResolver;
     private final TierHistoryService tierHistoryService;
 
@@ -52,7 +51,7 @@ public class RewardIssuanceService {
         CustomerBalanceCacheRepository balanceCacheRepository,
         EarnRuleRepository earnRuleRepository,
         RewardIssuanceAuditService rewardIssuanceAuditService,
-        RewardEngineProperties rewardEngineProperties,
+        ProgrammeCreditExpiryResolver creditExpiryResolver,
         TierResolver tierResolver,
         TierHistoryService tierHistoryService
     ) {
@@ -60,7 +59,7 @@ public class RewardIssuanceService {
         this.balanceCacheRepository = Objects.requireNonNull(balanceCacheRepository, "balanceCacheRepository");
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.rewardIssuanceAuditService = Objects.requireNonNull(rewardIssuanceAuditService, "rewardIssuanceAuditService");
-        this.rewardEngineProperties = Objects.requireNonNull(rewardEngineProperties, "rewardEngineProperties");
+        this.creditExpiryResolver = Objects.requireNonNull(creditExpiryResolver, "creditExpiryResolver");
         this.tierResolver = Objects.requireNonNull(tierResolver, "tierResolver");
         this.tierHistoryService = Objects.requireNonNull(tierHistoryService, "tierHistoryService");
     }
@@ -150,6 +149,11 @@ public class RewardIssuanceService {
                 );
             }
 
+            BigDecimal balanceBefore = readBalance(tenantId, programmeUid, customerId);
+            var customerTier = tierResolver.resolveTierForBalance(tenantId, programmeUid, balanceBefore);
+            String customerTierUid = customerTier.map(TierDefinition::getTierUid).orElse(null);
+            Instant earnedAt = Instant.now();
+
             BigDecimal total = BigDecimal.ZERO;
             List<PointsLedger> toSave = new ArrayList<>();
             for (RewardIssueCommandDto cmd : commands.stream()
@@ -170,7 +174,9 @@ public class RewardIssuanceService {
 
                 String description = buildDescription(eventId, cmd, request.getNarrative());
 
-                Instant creditExpiresAt = cmd.getExpiresAt() != null ? cmd.getExpiresAt() : defaultCreditExpiresAt();
+                Instant creditExpiresAt = cmd.getExpiresAt() != null
+                    ? cmd.getExpiresAt()
+                    : creditExpiryResolver.resolveExpiresAt(tenantId, programmeUid, earnedAt, customerTierUid);
 
                 PointsLedger row = PointsLedger.builder()
                     .tenantId(tenantId)
@@ -192,8 +198,7 @@ public class RewardIssuanceService {
             List<PointsLedger> saved = pointsLedgerRepository.saveAll(toSave);
             pointsLedgerRepository.flush();
 
-            BigDecimal balanceBefore = readBalance(tenantId, programmeUid, customerId);
-            var previousTier = tierResolver.resolveTierForBalance(tenantId, programmeUid, balanceBefore);
+            var previousTier = customerTier;
 
             balanceCacheRepository.incrementBalance(tenantId, programmeUid, customerId, total);
 
@@ -325,14 +330,6 @@ public class RewardIssuanceService {
         return balanceCacheRepository.findById(id)
             .map(CustomerBalanceCache::getBalance)
             .orElse(BigDecimal.ZERO);
-    }
-
-    private Instant defaultCreditExpiresAt() {
-        int months = rewardEngineProperties.getDefaultCreditExpiryMonths();
-        if (months <= 0) {
-            return null;
-        }
-        return Instant.now().atZone(ZoneOffset.UTC).plusMonths(months).toInstant();
     }
 
     private static String buildDescription(String eventId, RewardIssueCommandDto cmd, String narrative) {

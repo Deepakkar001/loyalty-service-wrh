@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.dto;
 
 import com.loyaltyos.campaigns.model.DroppedCampaign;
+import com.loyaltyos.rules.dto.RuleEvaluationResponse;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,12 +23,19 @@ public class LoyaltyEventProcessResponse {
     private BigDecimal totalPointsAwarded = BigDecimal.ZERO;
     private BigDecimal previousBalance;
     private BigDecimal newBalance;
+    private String tierBeforeUid;
+    private String tierAfterUid;
+    private String tierBeforeName;
+    private String tierAfterName;
+    private boolean tierChanged;
     private boolean programmeCapApplied;
     private String resolutionMode;
     private List<AppliedCampaignLine> campaignsApplied = new ArrayList<>();
     private List<DroppedCampaign> campaignsDropped = new ArrayList<>();
     /** Optional: populated when a rule is configured to auto-issue voucher on event match. */
     private VoucherIssuanceResult voucherIssuance;
+    /** Rule engine evaluation details for integration and audit responses. */
+    private RuleEvaluationResponse ruleEvaluation;
 
     public String getTenantId() {
         return tenantId;
@@ -141,6 +149,46 @@ public class LoyaltyEventProcessResponse {
         this.newBalance = newBalance;
     }
 
+    public String getTierBeforeUid() {
+        return tierBeforeUid;
+    }
+
+    public void setTierBeforeUid(String tierBeforeUid) {
+        this.tierBeforeUid = tierBeforeUid;
+    }
+
+    public String getTierAfterUid() {
+        return tierAfterUid;
+    }
+
+    public void setTierAfterUid(String tierAfterUid) {
+        this.tierAfterUid = tierAfterUid;
+    }
+
+    public String getTierBeforeName() {
+        return tierBeforeName;
+    }
+
+    public void setTierBeforeName(String tierBeforeName) {
+        this.tierBeforeName = tierBeforeName;
+    }
+
+    public String getTierAfterName() {
+        return tierAfterName;
+    }
+
+    public void setTierAfterName(String tierAfterName) {
+        this.tierAfterName = tierAfterName;
+    }
+
+    public boolean isTierChanged() {
+        return tierChanged;
+    }
+
+    public void setTierChanged(boolean tierChanged) {
+        this.tierChanged = tierChanged;
+    }
+
     public boolean isProgrammeCapApplied() {
         return programmeCapApplied;
     }
@@ -175,6 +223,9 @@ public class LoyaltyEventProcessResponse {
 
     public VoucherIssuanceResult getVoucherIssuance() { return voucherIssuance; }
     public void setVoucherIssuance(VoucherIssuanceResult voucherIssuance) { this.voucherIssuance = voucherIssuance; }
+
+    public RuleEvaluationResponse getRuleEvaluation() { return ruleEvaluation; }
+    public void setRuleEvaluation(RuleEvaluationResponse ruleEvaluation) { this.ruleEvaluation = ruleEvaluation; }
 
     public static class VoucherIssuanceResult {
         private String ruleUid;

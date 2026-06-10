@@ -25,11 +25,13 @@ import com.loyaltyos.campaigns.model.EligibilityResult;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
 import com.loyaltyos.campaigns.repository.CampaignResolutionLogRepository;
+import com.loyaltyos.analytics.model.CustomerTierOutcome;
+import com.loyaltyos.analytics.service.CustomerTierOutcomeResolver;
 import com.loyaltyos.onboarding.entity.ProgrammeConfig;
-import com.loyaltyos.rewards.config.RewardEngineProperties;
 import com.loyaltyos.rewards.dto.RewardIssueCommandDto;
 import com.loyaltyos.rewards.dto.RewardIssueRequest;
 import com.loyaltyos.rewards.dto.RewardIssueResponse;
+import com.loyaltyos.rewards.service.ProgrammeCreditExpiryResolver;
 import com.loyaltyos.rewards.service.RewardIssuanceService;
 import com.loyaltyos.rules.dto.RuleEvaluateRequest;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
@@ -54,7 +56,6 @@ import com.loyaltyos.voucher.service.VoucherAutoIssueService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -86,7 +87,8 @@ public class CampaignOrchestrationService {
     private final RuleEvaluationService ruleEvaluationService;
     private final RuleEarningCapService ruleEarningCapService;
     private final RewardIssuanceService rewardIssuanceService;
-    private final RewardEngineProperties rewardEngineProperties;
+    private final ProgrammeCreditExpiryResolver creditExpiryResolver;
+    private final CustomerTierOutcomeResolver customerTierOutcomeResolver;
     private final CampaignJsonSupport jsonSupport;
     private final CampaignParticipationRepository participationRepository;
     private final CampaignRepository campaignRepository;
@@ -109,7 +111,8 @@ public class CampaignOrchestrationService {
         RuleEvaluationService ruleEvaluationService,
         RuleEarningCapService ruleEarningCapService,
         RewardIssuanceService rewardIssuanceService,
-        RewardEngineProperties rewardEngineProperties,
+        ProgrammeCreditExpiryResolver creditExpiryResolver,
+        CustomerTierOutcomeResolver customerTierOutcomeResolver,
         CampaignJsonSupport jsonSupport,
         CampaignParticipationRepository participationRepository,
         CampaignRepository campaignRepository,
@@ -131,7 +134,10 @@ public class CampaignOrchestrationService {
         this.ruleEvaluationService = Objects.requireNonNull(ruleEvaluationService, "ruleEvaluationService");
         this.ruleEarningCapService = Objects.requireNonNull(ruleEarningCapService, "ruleEarningCapService");
         this.rewardIssuanceService = Objects.requireNonNull(rewardIssuanceService, "rewardIssuanceService");
-        this.rewardEngineProperties = Objects.requireNonNull(rewardEngineProperties, "rewardEngineProperties");
+        this.creditExpiryResolver = Objects.requireNonNull(creditExpiryResolver, "creditExpiryResolver");
+        this.customerTierOutcomeResolver = Objects.requireNonNull(
+            customerTierOutcomeResolver, "customerTierOutcomeResolver"
+        );
         this.jsonSupport = Objects.requireNonNull(jsonSupport, "jsonSupport");
         this.participationRepository = Objects.requireNonNull(participationRepository, "participationRepository");
         this.campaignRepository = Objects.requireNonNull(campaignRepository, "campaignRepository");
@@ -221,7 +227,7 @@ public class CampaignOrchestrationService {
             Optional<CampaignResolutionLog> prior = resolutionLogRepository.findByTenantIdAndEventId(tenantId, eventId);
             if (prior.isPresent()) {
                 LoyaltyEventProcessResponse replay = buildResponseFromResolutionLog(
-                    tenantId, programmeUid, customerId, eventId, prior.get()
+                    tenantId, programmeUid, customerId, eventId, prior.get(), request.getCustomerTierUid()
                 );
                 return new CoreProcessResult(replay, null, programmeUid, customerId, eventId);
             }
@@ -265,7 +271,8 @@ public class CampaignOrchestrationService {
             failure.setSuccess(false);
             failure.setMessage(ruleEval.getMessage());
             failure.setCampaignsDropped(allDropped);
-            return new CoreProcessResult(failure, null, programmeUid, customerId, eventId);
+            failure.setRuleEvaluation(ruleEval);
+            return new CoreProcessResult(failure, ruleEval, programmeUid, customerId, eventId);
         }
 
         BigDecimal rulePoints = ruleEval.getFinalPointsAwarded() == null
@@ -275,7 +282,9 @@ public class CampaignOrchestrationService {
         boolean rulesMatched = ruleEval.getMatchedRules() != null && !ruleEval.getMatchedRules().isEmpty();
         applying = filterStackableWithRules(applying, rulesMatched, rulePoints, allDropped);
 
-        Instant defaultExpiry = defaultCreditExpiresAt();
+        Instant defaultExpiry = creditExpiryResolver.resolveExpiresAtForCustomer(
+            tenantId, programmeUid, customerId, request.getCustomerTierUid(), now
+        );
         List<CampaignBuiltAward> builtAwards = ruleGatedRuntime
             ? List.of()
             : rewardCommandBuilder.build(applying, eventContext, eventId, rulePoints, defaultExpiry);
@@ -433,6 +442,17 @@ public class CampaignOrchestrationService {
         response.setResolutionMode(resolutionMode);
         response.setCampaignsApplied(toAppliedLines(builtAwards));
         response.setCampaignsDropped(allDropped);
+        applyTierOutcome(
+            response,
+            customerTierOutcomeResolver.resolve(
+                tenantId,
+                programmeUid,
+                request.getCustomerTierUid(),
+                balanceBeforeIssue,
+                response.getNewBalance()
+            )
+        );
+        response.setRuleEvaluation(ruleEval);
 
         return new CoreProcessResult(response, ruleEval, programmeUid, customerId, eventId);
     }
@@ -828,7 +848,8 @@ public class CampaignOrchestrationService {
         String programmeUid,
         String customerId,
         String eventId,
-        CampaignResolutionLog logRow
+        CampaignResolutionLog logRow,
+        String requestedTierUid
     ) {
         BigDecimal balance = rewardIssuanceService.getBalance(tenantId, programmeUid, customerId).getBalance();
 
@@ -840,12 +861,30 @@ public class CampaignOrchestrationService {
             logRow.getTotalPointsAwarded() == null ? BigDecimal.ZERO : logRow.getTotalPointsAwarded()
         );
         response.setTotalPointsAwarded(response.getCampaignPointsAwarded());
+        response.setPreviousBalance(balance);
         response.setNewBalance(balance);
         response.setResolutionMode(logRow.getResolutionMode());
         response.setProgrammeCapApplied(logRow.isCapApplied());
         response.setCampaignsApplied(parseAppliedFromLog(logRow.getCampaignsApplied()));
         response.setCampaignsDropped(parseDroppedFromLog(logRow.getCampaignsDropped()));
+        applyTierOutcome(
+            response,
+            customerTierOutcomeResolver.resolve(
+                tenantId, programmeUid, requestedTierUid, balance, balance
+            )
+        );
         return response;
+    }
+
+    private static void applyTierOutcome(LoyaltyEventProcessResponse response, CustomerTierOutcome outcome) {
+        if (outcome == null) {
+            return;
+        }
+        response.setTierBeforeUid(outcome.tierBeforeUid());
+        response.setTierAfterUid(outcome.tierAfterUid());
+        response.setTierBeforeName(outcome.tierBeforeName());
+        response.setTierAfterName(outcome.tierAfterName());
+        response.setTierChanged(outcome.tierChanged());
     }
 
     private JsonNode toJsonArray(List<String> uids) {
@@ -998,14 +1037,6 @@ public class CampaignOrchestrationService {
         dto.setActionType(rc.getActionType());
         dto.setCommandId(rc.getCommandId());
         return dto;
-    }
-
-    private Instant defaultCreditExpiresAt() {
-        int months = rewardEngineProperties.getDefaultCreditExpiryMonths();
-        if (months <= 0) {
-            return null;
-        }
-        return Instant.now().atZone(ZoneOffset.UTC).plusMonths(months).toInstant();
     }
 
     private static LoyaltyEventProcessResponse baseResponse(

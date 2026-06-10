@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import com.loyaltyos.campaigns.entity.Campaign;
 import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.repository.CampaignAnalyticsQueryRepository;
 import com.loyaltyos.campaigns.repository.CampaignParticipationRepository;
 import com.loyaltyos.campaigns.repository.CampaignRepository;
 import java.math.BigDecimal;
@@ -24,6 +25,9 @@ class CampaignAnalyticsServiceTest {
     @Mock
     private CampaignParticipationRepository participationRepository;
 
+    @Mock
+    private CampaignAnalyticsQueryRepository analyticsQueryRepository;
+
     @InjectMocks
     private CampaignAnalyticsService analyticsService;
 
@@ -35,6 +39,7 @@ class CampaignAnalyticsServiceTest {
         c.setStatus(CampaignStatus.ACTIVE);
         c.setBudgetTotal(new BigDecimal("1000"));
         c.setBudgetConsumed(new BigDecimal("250"));
+        c.setCustomerScope(com.loyaltyos.campaigns.enums.CustomerScope.ALL);
 
         when(campaignRepository.findByTenantIdAndCampaignUid("t1", "camp-1")).thenReturn(Optional.of(c));
         when(participationRepository.countByTenantIdAndCampaignUid("t1", "camp-1")).thenReturn(5L);

@@ -10,6 +10,7 @@ import com.loyaltyos.referrals.dto.ReferralRuleSchemaResponse;
 import com.loyaltyos.referrals.support.ReferralMilestoneRuleRegistry;
 import com.loyaltyos.referrals.support.ReferralProgrammeSchemaLoader;
 import com.loyaltyos.referrals.support.ReferralRuleSchemaSupport;
+import com.loyaltyos.referrals.dto.ReferralEffectivenessReportResponse;
 import com.loyaltyos.referrals.dto.ReferralTimeToPurchaseResponse;
 import com.loyaltyos.referrals.dto.ReferralTopReferrerResponse;
 import com.loyaltyos.referrals.dto.ReferralTrendPointResponse;
@@ -21,6 +22,7 @@ import com.loyaltyos.referrals.service.ReferralFraudReviewService;
 import com.loyaltyos.referrals.service.ReferralProgrammeService;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -206,6 +209,17 @@ public class ReferralAdminController {
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
         return ResponseEntity.ok(analyticsService.timeToFirstPurchase(tenantId, programmeUid));
+    }
+
+    @GetMapping("/analytics/effectiveness-report")
+    public ResponseEntity<ReferralEffectivenessReportResponse> effectivenessReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(defaultValue = "default") String programmeUid,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        String tenantId = TenantJwt.tenantId(jwt);
+        return ResponseEntity.ok(analyticsService.buildEffectivenessReport(tenantId, programmeUid, from, to));
     }
 
     @GetMapping(value = "/export", produces = "text/csv")

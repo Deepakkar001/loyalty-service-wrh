@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.dto;
 
 import com.loyaltyos.campaigns.enums.CampaignStatus;
+import com.loyaltyos.campaigns.enums.CustomerScope;
 import java.math.BigDecimal;
 
 public class CampaignStatsResponse {
@@ -16,6 +17,17 @@ public class CampaignStatsResponse {
     private long uniqueCustomersReached;
     private BigDecimal totalPointsIssued;
     private BigDecimal totalCashbackRecorded;
+    private CustomerScope customerScope;
+    private String awardType;
+    private int targetAudienceSize;
+    private Integer maxParticipations;
+    private Integer maxPerCustomer;
+    private BigDecimal avgPointsPerParticipation;
+    private BigDecimal avgCashbackPerParticipation;
+    private BigDecimal avgParticipationsPerCustomer;
+    private BigDecimal audienceReachPct;
+    private BigDecimal participationCapPct;
+    private BigDecimal rewardCostPerParticipation;
 
     public String getCampaignUid() { return campaignUid; }
     public void setCampaignUid(String campaignUid) { this.campaignUid = campaignUid; }
@@ -39,4 +51,26 @@ public class CampaignStatsResponse {
     public void setTotalPointsIssued(BigDecimal totalPointsIssued) { this.totalPointsIssued = totalPointsIssued; }
     public BigDecimal getTotalCashbackRecorded() { return totalCashbackRecorded; }
     public void setTotalCashbackRecorded(BigDecimal totalCashbackRecorded) { this.totalCashbackRecorded = totalCashbackRecorded; }
+    public CustomerScope getCustomerScope() { return customerScope; }
+    public void setCustomerScope(CustomerScope customerScope) { this.customerScope = customerScope; }
+    public String getAwardType() { return awardType; }
+    public void setAwardType(String awardType) { this.awardType = awardType; }
+    public int getTargetAudienceSize() { return targetAudienceSize; }
+    public void setTargetAudienceSize(int targetAudienceSize) { this.targetAudienceSize = targetAudienceSize; }
+    public Integer getMaxParticipations() { return maxParticipations; }
+    public void setMaxParticipations(Integer maxParticipations) { this.maxParticipations = maxParticipations; }
+    public Integer getMaxPerCustomer() { return maxPerCustomer; }
+    public void setMaxPerCustomer(Integer maxPerCustomer) { this.maxPerCustomer = maxPerCustomer; }
+    public BigDecimal getAvgPointsPerParticipation() { return avgPointsPerParticipation; }
+    public void setAvgPointsPerParticipation(BigDecimal avgPointsPerParticipation) { this.avgPointsPerParticipation = avgPointsPerParticipation; }
+    public BigDecimal getAvgCashbackPerParticipation() { return avgCashbackPerParticipation; }
+    public void setAvgCashbackPerParticipation(BigDecimal avgCashbackPerParticipation) { this.avgCashbackPerParticipation = avgCashbackPerParticipation; }
+    public BigDecimal getAvgParticipationsPerCustomer() { return avgParticipationsPerCustomer; }
+    public void setAvgParticipationsPerCustomer(BigDecimal avgParticipationsPerCustomer) { this.avgParticipationsPerCustomer = avgParticipationsPerCustomer; }
+    public BigDecimal getAudienceReachPct() { return audienceReachPct; }
+    public void setAudienceReachPct(BigDecimal audienceReachPct) { this.audienceReachPct = audienceReachPct; }
+    public BigDecimal getParticipationCapPct() { return participationCapPct; }
+    public void setParticipationCapPct(BigDecimal participationCapPct) { this.participationCapPct = participationCapPct; }
+    public BigDecimal getRewardCostPerParticipation() { return rewardCostPerParticipation; }
+    public void setRewardCostPerParticipation(BigDecimal rewardCostPerParticipation) { this.rewardCostPerParticipation = rewardCostPerParticipation; }
 }

@@ -31,6 +31,8 @@ public class CampaignProperties {
 
     private BigDecimal defaultAlertThresholdPct = new BigDecimal("80");
 
+    private BigDecimal approvalBudgetThreshold = new BigDecimal("100000");
+
     private boolean resolutionLogEnabled = true;
 
     private EventProcessingMode eventProcessingMode = EventProcessingMode.LEGACY_BOTH;
@@ -82,7 +84,13 @@ public class CampaignProperties {
 
     }
 
+    public BigDecimal getApprovalBudgetThreshold() {
+        return approvalBudgetThreshold;
+    }
 
+    public void setApprovalBudgetThreshold(BigDecimal approvalBudgetThreshold) {
+        this.approvalBudgetThreshold = approvalBudgetThreshold;
+    }
 
     public boolean isResolutionLogEnabled() {
 

@@ -21,6 +21,10 @@ public class IntegrationResponseMapper {
         RuleEvaluationResponse ruleEval,
         int processingTimeMs
     ) {
+        if (ruleEval == null) {
+            ruleEval = core.getRuleEvaluation();
+        }
+
         EventProcessingResponse response = new EventProcessingResponse();
         response.setStatus("SUCCESS");
         response.setEventId(request.eventId());
@@ -30,9 +34,19 @@ public class IntegrationResponseMapper {
 
         EventProcessingResponse.CustomerInfo customer = new EventProcessingResponse.CustomerInfo();
         customer.setCustomerId(request.customerId());
-        customer.setTierBefore(request.customerTierUid());
-        customer.setTierAfter(request.customerTierUid());
-        customer.setTierChanged(false);
+        if (core.getTierBeforeName() != null || core.getTierAfterName() != null) {
+            customer.setTierBefore(core.getTierBeforeName());
+            customer.setTierAfter(core.getTierAfterName());
+            customer.setTierChanged(core.isTierChanged());
+        } else if (core.getTierBeforeUid() != null || core.getTierAfterUid() != null) {
+            customer.setTierBefore(core.getTierBeforeUid());
+            customer.setTierAfter(core.getTierAfterUid());
+            customer.setTierChanged(core.isTierChanged());
+        } else {
+            customer.setTierBefore(request.customerTierUid());
+            customer.setTierAfter(request.customerTierUid());
+            customer.setTierChanged(false);
+        }
         response.setCustomer(customer);
 
         EventProcessingResponse.EarningsInfo earnings = new EventProcessingResponse.EarningsInfo();
@@ -79,13 +93,9 @@ public class IntegrationResponseMapper {
             rules.getMatched().add(synthetic);
         }
         if (ruleEval != null && ruleEval.getMatchedRules() != null) {
+            BigDecimal tierMultiplier = ruleEval.getTierMultiplier();
             for (RuleEvaluationResponse.MatchedRuleInfo m : ruleEval.getMatchedRules()) {
-                EventProcessingResponse.MatchedRuleLine line = new EventProcessingResponse.MatchedRuleLine();
-                line.setRuleId(m.getRuleUid());
-                line.setRuleName(m.getRuleName());
-                line.setPriority(m.getPriority());
-                line.setPointsAwarded(m.getPointsFromThisRule());
-                rules.getMatched().add(line);
+                rules.getMatched().add(toMatchedRuleLine(m, tierMultiplier));
             }
         }
         if (ruleEval != null && ruleEval.getSuppressedRules() != null) {
@@ -134,15 +144,26 @@ public class IntegrationResponseMapper {
         if (ruleEval == null || ruleEval.getMatchedRules() == null) {
             return lines;
         }
+        BigDecimal tierMultiplier = ruleEval.getTierMultiplier();
         for (RuleEvaluationResponse.MatchedRuleInfo m : ruleEval.getMatchedRules()) {
-            EventProcessingResponse.MatchedRuleLine line = new EventProcessingResponse.MatchedRuleLine();
-            line.setRuleId(m.getRuleUid());
-            line.setRuleName(m.getRuleName());
-            line.setPriority(m.getPriority());
-            line.setPointsAwarded(m.getPointsFromThisRule());
-            lines.add(line);
+            lines.add(toMatchedRuleLine(m, tierMultiplier));
         }
         return lines;
+    }
+
+    private static EventProcessingResponse.MatchedRuleLine toMatchedRuleLine(
+        RuleEvaluationResponse.MatchedRuleInfo matchedRule,
+        BigDecimal tierMultiplier
+    ) {
+        EventProcessingResponse.MatchedRuleLine line = new EventProcessingResponse.MatchedRuleLine();
+        line.setRuleId(matchedRule.getRuleUid());
+        line.setRuleName(matchedRule.getRuleName());
+        line.setPriority(matchedRule.getPriority());
+        line.setPointsAwarded(matchedRule.getPointsFromThisRule());
+        if (tierMultiplier != null) {
+            line.setMultiplier(tierMultiplier);
+        }
+        return line;
     }
 
     private static Instant resolveTimestamp(IntegrationParsedEvent request) {
