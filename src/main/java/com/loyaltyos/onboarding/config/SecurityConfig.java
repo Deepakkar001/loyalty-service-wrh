@@ -1,5 +1,7 @@
 package com.loyaltyos.onboarding.config;
 
+import com.loyaltyos.access.security.TenantModuleAccessFilter;
+import com.loyaltyos.access.security.TenantSessionVersionFilter;
 import com.loyaltyos.onboarding.security.ApiKeyAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,9 +32,17 @@ import java.util.List;
 public class SecurityConfig {
 
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
+    private final TenantModuleAccessFilter tenantModuleAccessFilter;
+    private final TenantSessionVersionFilter tenantSessionVersionFilter;
 
-    public SecurityConfig(ApiKeyAuthenticationFilter apiKeyAuthenticationFilter) {
+    public SecurityConfig(
+        ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
+        TenantModuleAccessFilter tenantModuleAccessFilter,
+        TenantSessionVersionFilter tenantSessionVersionFilter
+    ) {
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
+        this.tenantModuleAccessFilter = tenantModuleAccessFilter;
+        this.tenantSessionVersionFilter = tenantSessionVersionFilter;
     }
 
     @Bean
@@ -62,11 +72,15 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .oauth2ResourceServer(oauth2 -> oauth2
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+            .addFilterAfter(tenantModuleAccessFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
+            .addFilterAfter(tenantSessionVersionFilter, TenantModuleAccessFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/v1/auth/login",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
+                    "/api/v1/auth/accept-invite",
+                    "/api/v1/merchant/auth/login",
                     "/api/v1/admin/auth/login",
                     "/api/v1/onboarding/register",
                     "/api/v1/onboarding/metadata",

@@ -44,7 +44,7 @@ cp application-secrets.example.yml application-secrets.yml
 
 ### Run the application
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=local'
+./gradlew bootRun
 ```
 
 ### Swagger / API quickstart (Stage 1)

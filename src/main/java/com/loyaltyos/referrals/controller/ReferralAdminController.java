@@ -30,6 +30,7 @@ import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -66,6 +67,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/programmes")
+    @PreAuthorize("hasPermission('referrals.create')")
     public ResponseEntity<Map<String, Object>> upsertProgramme(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody ReferralProgrammeUpsertRequest request
@@ -146,6 +148,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/approve")
+    @PreAuthorize("hasPermission('referrals.approve')")
     public ResponseEntity<Map<String, String>> approveFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,
@@ -158,6 +161,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/reject")
+    @PreAuthorize("hasPermission('referrals.approve')")
     public ResponseEntity<Map<String, String>> rejectFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,
@@ -170,6 +174,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/override")
+    @PreAuthorize("hasPermission('referrals.approve')")
     public ResponseEntity<Map<String, String>> overrideFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,
@@ -220,6 +225,27 @@ public class ReferralAdminController {
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
         return ResponseEntity.ok(analyticsService.buildEffectivenessReport(tenantId, programmeUid, from, to));
+    }
+
+    @GetMapping(value = "/analytics/effectiveness-report/export", produces = "text/csv")
+    public ResponseEntity<byte[]> exportEffectivenessReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(defaultValue = "default") String programmeUid,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        String tenantId = TenantJwt.tenantId(jwt);
+        StringBuilder csv = new StringBuilder(
+            "section,field1,field2,field3,field4,field5,field6,field7\n"
+        );
+        analyticsService.streamEffectivenessReportCsv(tenantId, programmeUid, from, to, line -> {
+            csv.append(line).append('\n');
+        });
+        String filename = "referral-effectiveness-" + programmeUid + "-" + from + "-to-" + to + ".csv";
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+            .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+            .body(csv.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     @GetMapping(value = "/export", produces = "text/csv")

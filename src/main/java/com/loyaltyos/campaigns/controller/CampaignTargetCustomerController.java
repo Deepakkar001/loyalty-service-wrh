@@ -13,6 +13,7 @@ import com.loyaltyos.onboarding.security.TenantJwt;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -48,6 +49,7 @@ public class CampaignTargetCustomerController {
     }
 
     @PostMapping("/{campaignUid}/target-customers/upload")
+    @PreAuthorize("hasPermission('campaigns.edit')")
     public ResponseEntity<CampaignTargetUploadResponse> upload(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -83,6 +85,7 @@ public class CampaignTargetCustomerController {
     }
 
     @DeleteMapping("/{campaignUid}/target-customers/{customerId}")
+    @PreAuthorize("hasPermission('campaigns.edit')")
     public ResponseEntity<Void> remove(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,

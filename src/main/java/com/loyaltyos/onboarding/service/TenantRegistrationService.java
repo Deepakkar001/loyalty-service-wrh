@@ -1,5 +1,6 @@
 package com.loyaltyos.onboarding.service;
 
+import com.loyaltyos.access.service.AccessProvisioningService;
 import com.loyaltyos.onboarding.entity.OnboardingAuditLog;
 import com.loyaltyos.onboarding.entity.RefBusinessCategory;
 import com.loyaltyos.onboarding.entity.TenantContact;
@@ -60,6 +61,7 @@ public class TenantRegistrationService {
     private final EmailVerificationMailer emailVerificationMailer;
     private final StringRedisTemplate redis;
     private final OnboardingDeletionService deletionService;
+    private final AccessProvisioningService accessProvisioningService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     private static final int VERIFICATION_CODE_LENGTH = 6;
@@ -86,7 +88,8 @@ public class TenantRegistrationService {
         SlugGenerationService slugGenerationService,
         EmailVerificationMailer emailVerificationMailer,
         StringRedisTemplate redis,
-        OnboardingDeletionService deletionService
+        OnboardingDeletionService deletionService,
+        AccessProvisioningService accessProvisioningService
     ) {
         this.tenantRepository = Objects.requireNonNull(tenantRepository, "tenantRepository");
         this.contactRepository = Objects.requireNonNull(contactRepository, "contactRepository");
@@ -99,6 +102,7 @@ public class TenantRegistrationService {
         this.emailVerificationMailer = Objects.requireNonNull(emailVerificationMailer, "emailVerificationMailer");
         this.redis = Objects.requireNonNull(redis, "redis");
         this.deletionService = Objects.requireNonNull(deletionService, "deletionService");
+        this.accessProvisioningService = Objects.requireNonNull(accessProvisioningService, "accessProvisioningService");
     }
 
     @Transactional
@@ -407,6 +411,12 @@ public class TenantRegistrationService {
 
         stateMachine.transition(tenant, OnboardingStatus.EMAIL_VERIFIED, tenant.getTenantId(), "TENANT");
         tenantRepository.save(tenant);
+
+        String fullName = contactRepository.findByTenantIdAndRole(tenant.getTenantId(), ContactRole.PRIMARY_ADMIN)
+            .map(TenantContact::getName)
+            .orElse(null);
+        accessProvisioningService.provisionPrimaryAdmin(
+            tenant.getTenantId(), normalizedEmail, tenant.getPasswordHash(), fullName);
     }
 
     @Transactional

@@ -376,6 +376,7 @@ public class CampaignOrchestrationService {
         issueRequest.setProgrammeUid(programmeUid);
         issueRequest.setCustomerId(customerId);
         issueRequest.setEventId(eventId);
+        issueRequest.setMerchantUid(metadataString(request, "merchantId"));
         issueRequest.setRewardCommands(issueCommands);
 
         RewardIssueResponse issueResponse = rewardIssuanceService.issue(tenantId, issueRequest);

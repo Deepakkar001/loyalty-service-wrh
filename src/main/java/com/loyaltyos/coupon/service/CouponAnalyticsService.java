@@ -2,9 +2,12 @@ package com.loyaltyos.coupon.service;
 
 import com.loyaltyos.analytics.dto.TenantFinanceContext;
 import com.loyaltyos.analytics.repository.AnalyticsQueryRepository;
+import com.loyaltyos.coupon.dto.CouponChannelBreakdownRow;
 import com.loyaltyos.coupon.dto.CouponPerformanceRow;
+import com.loyaltyos.coupon.dto.CouponTypeBreakdownRow;
 import com.loyaltyos.coupon.dto.CouponUsageReportResponse;
 import com.loyaltyos.coupon.dto.CouponUsageSummary;
+import com.loyaltyos.coupon.dto.CouponUsageTrendRow;
 import com.loyaltyos.coupon.entity.Coupon;
 import com.loyaltyos.coupon.enums.CouponStatus;
 import com.loyaltyos.coupon.repository.CouponAnalyticsQueryRepository;
@@ -19,6 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -106,6 +110,88 @@ public class CouponAnalyticsService {
         report.setByCouponType(analyticsQueryRepository.getTypeBreakdown(tenantId, programme, from, to));
         report.setCoupons(rows);
         return report;
+    }
+
+    @Transactional(readOnly = true)
+    public void streamUsageReportCsv(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        Consumer<String> lineConsumer
+    ) {
+        CouponUsageReportResponse report = buildUsageReport(tenantId, programmeUid, from, to);
+        CouponUsageSummary summary = report.getSummary();
+        lineConsumer.accept(csvJoin(
+            "SUMMARY",
+            summary.getProgrammeUid(),
+            String.valueOf(summary.getTotalCoupons()),
+            String.valueOf(summary.getActiveCoupons()),
+            String.valueOf(summary.getRedemptionsInPeriod()),
+            String.valueOf(summary.getUniqueCustomersInPeriod()),
+            decimal(summary.getTotalDiscountInPeriod()),
+            decimal(summary.getTotalOrderValueInPeriod()),
+            decimal(summary.getTotalPointsCreditedInPeriod())
+        ));
+        for (CouponUsageTrendRow row : report.getDailyRedemptions()) {
+            lineConsumer.accept(csvJoin(
+                "DAILY",
+                row.period(),
+                String.valueOf(row.redemptions()),
+                decimal(row.discountTotal()),
+                decimal(row.orderValueTotal()),
+                decimal(row.pointsCredited())
+            ));
+        }
+        for (CouponChannelBreakdownRow row : report.getByChannel()) {
+            lineConsumer.accept(csvJoin(
+                "CHANNEL",
+                row.channel(),
+                String.valueOf(row.redemptions()),
+                decimal(row.discountTotal()),
+                decimal(row.orderValueTotal())
+            ));
+        }
+        for (CouponTypeBreakdownRow row : report.getByCouponType()) {
+            lineConsumer.accept(csvJoin(
+                "TYPE",
+                row.couponType(),
+                String.valueOf(row.redemptions()),
+                decimal(row.discountTotal())
+            ));
+        }
+        for (CouponPerformanceRow row : report.getCoupons()) {
+            lineConsumer.accept(csvJoin(
+                "COUPON",
+                row.getCouponUid(),
+                row.getCouponCode(),
+                row.getCouponName(),
+                row.getCouponType(),
+                row.getStatus(),
+                String.valueOf(row.getRedemptionsInPeriod()),
+                decimal(row.getDiscountInPeriod()),
+                decimal(row.getUtilizationPct())
+            ));
+        }
+    }
+
+    private static String csvJoin(String... cells) {
+        return String.join(",", java.util.Arrays.stream(cells).map(CouponAnalyticsService::csvCell).toList());
+    }
+
+    private static String csvCell(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String v = raw.replace("\"", "\"\"");
+        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+            return "\"" + v + "\"";
+        }
+        return v;
+    }
+
+    private static String decimal(BigDecimal value) {
+        return value == null ? "0" : value.toPlainString();
     }
 
     private static String normalize(String programmeUid) {

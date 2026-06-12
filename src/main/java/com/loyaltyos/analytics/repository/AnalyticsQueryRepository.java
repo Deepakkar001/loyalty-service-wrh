@@ -1,5 +1,6 @@
 package com.loyaltyos.analytics.repository;
 
+import com.loyaltyos.analytics.dto.BalanceReconciliationVarianceRow;
 import com.loyaltyos.analytics.dto.BreakageMonthlyRow;
 import com.loyaltyos.analytics.dto.BreakageTierRow;
 import com.loyaltyos.analytics.dto.CohortRetentionRow;
@@ -9,6 +10,9 @@ import com.loyaltyos.analytics.dto.EnrollmentSummary;
 import com.loyaltyos.analytics.dto.EnrollmentTrendRow;
 import com.loyaltyos.analytics.dto.ExpirePeriodSummary;
 import com.loyaltyos.analytics.dto.ExpiryJobRunRow;
+import com.loyaltyos.analytics.dto.LedgerMovementAggregate;
+import com.loyaltyos.analytics.dto.LiabilityTierBreakdownRow;
+import com.loyaltyos.analytics.dto.ReconciliationDailyRow;
 import com.loyaltyos.analytics.dto.PointsActivityRow;
 import com.loyaltyos.analytics.dto.RuleEffectivenessRow;
 import com.loyaltyos.analytics.dto.RulePerformanceRow;
@@ -21,8 +25,11 @@ import com.loyaltyos.analytics.dto.UpcomingExpiryMonthRow;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -941,6 +948,343 @@ public class AnalyticsQueryRepository {
     /**
      * First CREDIT row per customer — proxy for programme enrollment (no separate enrolment table).
      */
+    public BigDecimal getNetLedgerBalanceAsOf(
+        String tenantId,
+        String programmeUid,
+        LocalDate asOfExclusive
+    ) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("asOfDate", asOfExclusive.atStartOfDay());
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String signed = signedPointsSql("pl");
+        String sql = """
+            SELECT COALESCE(SUM(%s), 0) AS net_balance
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.created_at < :asOfDate
+            """.formatted(signed, programmeEq);
+        return Optional.ofNullable(
+            jdbc.queryForObject(sql, params, (rs, i) -> rs.getBigDecimal("net_balance"))
+        ).orElse(BigDecimal.ZERO);
+    }
+
+    public List<LedgerMovementAggregate> getLedgerMovementsInPeriod(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String signed = signedPointsSql("pl");
+        String sql = """
+            SELECT pl.entry_type,
+                   COALESCE(SUM(pl.points), 0) AS points_magnitude,
+                   COALESCE(SUM(%s), 0) AS signed_impact,
+                   COUNT(*) AS transaction_count,
+                   COUNT(DISTINCT pl.customer_id) AS unique_customers
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.created_at >= :fromDate
+              AND pl.created_at < :toDate
+            GROUP BY pl.entry_type
+            ORDER BY pl.entry_type ASC
+            """.formatted(signed, programmeEq);
+        return jdbc.query(sql, params, (rs, i) -> new LedgerMovementAggregate(
+            rs.getString("entry_type"),
+            rs.getBigDecimal("points_magnitude"),
+            rs.getBigDecimal("signed_impact"),
+            rs.getLong("transaction_count"),
+            rs.getLong("unique_customers")
+        ));
+    }
+
+    public List<ReconciliationDailyRow> getDailyReconciliationTrend(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String signed = signedPointsSql("pl");
+        String sql = """
+            SELECT DATE_FORMAT(daily.day_bucket, '%%Y-%%m-%%d') AS period,
+                   daily.accruals,
+                   daily.redemptions,
+                   daily.expirations,
+                   daily.reversals,
+                   daily.adjustments,
+                   daily.net_change
+            FROM (
+              SELECT DATE(pl.created_at) AS day_bucket,
+                     COALESCE(SUM(CASE WHEN pl.entry_type = 'CREDIT' THEN pl.points ELSE 0 END), 0) AS accruals,
+                     COALESCE(SUM(CASE WHEN pl.entry_type = 'DEBIT' THEN pl.points ELSE 0 END), 0) AS redemptions,
+                     COALESCE(SUM(CASE WHEN pl.entry_type = 'EXPIRE' THEN pl.points ELSE 0 END), 0) AS expirations,
+                     COALESCE(SUM(CASE WHEN pl.entry_type = 'REVERSAL' THEN pl.points ELSE 0 END), 0) AS reversals,
+                     COALESCE(SUM(CASE WHEN pl.entry_type = 'ADJUST' THEN pl.points ELSE 0 END), 0) AS adjustments,
+                     COALESCE(SUM(%s), 0) AS net_change
+              FROM points_ledger pl
+              WHERE pl.tenant_id = :tenantId
+                AND %s
+                AND pl.created_at >= :fromDate
+                AND pl.created_at < :toDate
+              GROUP BY DATE(pl.created_at)
+            ) daily
+            ORDER BY daily.day_bucket ASC
+            """.formatted(signed, programmeEq);
+        return jdbc.query(sql, params, (rs, i) -> new ReconciliationDailyRow(
+            rs.getString("period"),
+            rs.getBigDecimal("accruals"),
+            rs.getBigDecimal("redemptions"),
+            rs.getBigDecimal("expirations"),
+            rs.getBigDecimal("reversals"),
+            rs.getBigDecimal("adjustments"),
+            rs.getBigDecimal("net_change")
+        ));
+    }
+
+    public long countUniqueLedgerCustomersInPeriod(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to);
+        String programmeEq = AnalyticsProgrammeSql.programmeColumnEqualsParam("pl.programme_uid");
+        String sql = """
+            SELECT COUNT(DISTINCT pl.customer_id)
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND %s
+              AND pl.created_at >= :fromDate
+              AND pl.created_at < :toDate
+            """.formatted(programmeEq);
+        Long count = jdbc.queryForObject(sql, params, Long.class);
+        return count == null ? 0L : count;
+    }
+
+    public List<BalanceReconciliationVarianceRow> getRecentBalanceVariances(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        int limit
+    ) {
+        var params = baseRangeParams(tenantId, programmeUid, from, to)
+            .addValue("limit", limit);
+        String sql = """
+            SELECT brl.customer_id,
+                   brl.expected_balance,
+                   brl.cached_balance,
+                   brl.variance,
+                   brl.reconciliation_action,
+                   brl.executed_at
+            FROM balance_reconciliation_logs brl
+            WHERE brl.tenant_id = :tenantId
+              AND brl.programme_uid = :programmeUid
+              AND brl.variance IS NOT NULL
+              AND brl.variance <> 0
+              AND brl.executed_at >= :fromDate
+              AND brl.executed_at < :toDate
+            ORDER BY brl.executed_at DESC
+            LIMIT :limit
+            """;
+        try {
+            return jdbc.query(sql, params, (rs, i) -> {
+                BalanceReconciliationVarianceRow row = new BalanceReconciliationVarianceRow();
+                row.setCustomerId(rs.getString("customer_id"));
+                row.setExpectedBalance(rs.getBigDecimal("expected_balance"));
+                row.setCachedBalance(rs.getBigDecimal("cached_balance"));
+                row.setVariance(rs.getBigDecimal("variance"));
+                row.setReconciliationAction(rs.getString("reconciliation_action"));
+                Timestamp ts = rs.getTimestamp("executed_at");
+                row.setExecutedAt(ts == null ? null : ts.toInstant());
+                return row;
+            });
+        } catch (Exception ex) {
+            return List.of();
+        }
+    }
+
+    public long countMembersWithBalance(String tenantId, String programmeUid) {
+        var params = tenantProgrammeParams(tenantId, programmeUid);
+        String cbcProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("cbc.programme_uid");
+        String sql = """
+            SELECT COUNT(*)
+            FROM customer_balance_cache cbc
+            WHERE cbc.tenant_id = :tenantId
+              AND %s
+              AND cbc.balance > 0
+            """.formatted(cbcProgramme);
+        Long count = jdbc.queryForObject(sql, params, Long.class);
+        return count == null ? 0L : count;
+    }
+
+    public List<LiabilityTierBreakdownRow> getLiabilityByTier(String tenantId, String programmeUid) {
+        var params = tenantProgrammeParams(tenantId, programmeUid);
+        String tdScope = AnalyticsProgrammeSql.programmeScope("td");
+        String td2Scope = AnalyticsProgrammeSql.programmeScope("td2");
+        String cbcTenantJoin = AnalyticsProgrammeSql.tenantColumnEquals("cbc.tenant_id", "td.tenant_id");
+        String cbcProgrammeJoin = AnalyticsProgrammeSql.programmeJoin("cbc", "td");
+        String sql = """
+            SELECT
+              td.name AS tier_name,
+              td.rank_order,
+              COUNT(cbc.customer_id) AS member_count,
+              COALESCE(SUM(cbc.balance), 0) AS points_liability
+            FROM tier_definitions td
+            LEFT JOIN customer_balance_cache cbc
+                   ON %s
+                  AND %s
+                  AND cbc.balance >= td.entry_threshold
+                  AND cbc.balance < COALESCE(
+                        (SELECT MIN(td2.entry_threshold)
+                         FROM tier_definitions td2
+                         WHERE td2.tenant_id = td.tenant_id
+                           AND %s
+                           AND td2.rank_order > td.rank_order),
+                        999999999)
+            WHERE td.tenant_id = :tenantId
+              AND %s
+            GROUP BY td.name, td.rank_order
+            ORDER BY td.rank_order ASC
+            """.formatted(cbcTenantJoin, cbcProgrammeJoin, td2Scope, tdScope);
+        return jdbc.query(sql, params, (rs, i) -> new LiabilityTierBreakdownRow(
+            rs.getString("tier_name"),
+            rs.getInt("rank_order"),
+            rs.getLong("member_count"),
+            rs.getBigDecimal("points_liability"),
+            BigDecimal.ZERO
+        ));
+    }
+
+    public Map<String, BigDecimal> getOutstandingPointsByProgramme(String tenantId) {
+        String sql = """
+            SELECT COALESCE(cbc.programme_uid, 'default') AS programme_uid,
+                   COALESCE(SUM(cbc.balance), 0) AS outstanding_points
+            FROM customer_balance_cache cbc
+            WHERE cbc.tenant_id = :tenantId
+            GROUP BY COALESCE(cbc.programme_uid, 'default')
+            """;
+        Map<String, BigDecimal> result = new HashMap<>();
+        jdbc.query(
+            sql,
+            new MapSqlParameterSource("tenantId", tenantId),
+            rs -> {
+                result.put(rs.getString("programme_uid"), rs.getBigDecimal("outstanding_points"));
+            }
+        );
+        return result;
+    }
+
+    public Map<String, Long> getMemberCountByProgramme(String tenantId) {
+        String sql = """
+            SELECT COALESCE(cbc.programme_uid, 'default') AS programme_uid,
+                   COUNT(*) AS member_count
+            FROM customer_balance_cache cbc
+            WHERE cbc.tenant_id = :tenantId
+              AND cbc.balance > 0
+            GROUP BY COALESCE(cbc.programme_uid, 'default')
+            """;
+        Map<String, Long> result = new HashMap<>();
+        jdbc.query(
+            sql,
+            new MapSqlParameterSource("tenantId", tenantId),
+            rs -> {
+                result.put(rs.getString("programme_uid"), rs.getLong("member_count"));
+            }
+        );
+        return result;
+    }
+
+    public Map<String, ProgrammePeriodMovement> getProgrammePeriodMovements(
+        String tenantId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = new MapSqlParameterSource()
+            .addValue("tenantId", tenantId)
+            .addValue("fromDate", from.atStartOfDay())
+            .addValue("toDate", to.plusDays(1).atStartOfDay());
+        String signed = signedPointsSql("pl");
+        String programmeKey = "COALESCE(pl.programme_uid, 'default')";
+        String sql = """
+            SELECT %s AS programme_uid,
+                   pl.entry_type,
+                   COALESCE(SUM(pl.points), 0) AS points_magnitude,
+                   COALESCE(SUM(%s), 0) AS signed_impact,
+                   COUNT(*) AS transaction_count
+            FROM points_ledger pl
+            WHERE pl.tenant_id = :tenantId
+              AND pl.created_at >= :fromDate
+              AND pl.created_at < :toDate
+            GROUP BY %s, pl.entry_type
+            """.formatted(programmeKey, signed, programmeKey);
+        Map<String, ProgrammePeriodMovement> byProgramme = new HashMap<>();
+        jdbc.query(sql, params, rs -> {
+            String programmeUid = rs.getString("programme_uid");
+            ProgrammePeriodMovement movement = byProgramme.computeIfAbsent(
+                programmeUid,
+                ignored -> new ProgrammePeriodMovement()
+            );
+            String entryType = rs.getString("entry_type");
+            BigDecimal magnitude = rs.getBigDecimal("points_magnitude");
+            BigDecimal signedImpact = rs.getBigDecimal("signed_impact");
+            long txCount = rs.getLong("transaction_count");
+            movement.add(entryType, magnitude, signedImpact, txCount);
+        });
+        return byProgramme;
+    }
+
+    public static final class ProgrammePeriodMovement {
+        private BigDecimal issued = BigDecimal.ZERO;
+        private BigDecimal redeemed = BigDecimal.ZERO;
+        private BigDecimal expired = BigDecimal.ZERO;
+        private BigDecimal reversed = BigDecimal.ZERO;
+        private BigDecimal adjustmentsNet = BigDecimal.ZERO;
+        private BigDecimal netChange = BigDecimal.ZERO;
+        private long transactionCount;
+
+        void add(String entryType, BigDecimal magnitude, BigDecimal signedImpact, long txCount) {
+            BigDecimal mag = magnitude != null ? magnitude : BigDecimal.ZERO;
+            BigDecimal signed = signedImpact != null ? signedImpact : BigDecimal.ZERO;
+            switch (entryType) {
+                case "CREDIT" -> issued = issued.add(mag);
+                case "DEBIT" -> redeemed = redeemed.add(mag);
+                case "EXPIRE" -> expired = expired.add(mag);
+                case "REVERSAL" -> reversed = reversed.add(mag);
+                case "ADJUST" -> adjustmentsNet = adjustmentsNet.add(signed);
+                default -> { }
+            }
+            netChange = netChange.add(signed);
+            transactionCount += txCount;
+        }
+
+        public BigDecimal issued() { return issued; }
+        public BigDecimal redeemed() { return redeemed; }
+        public BigDecimal expired() { return expired; }
+        public BigDecimal reversed() { return reversed; }
+        public BigDecimal adjustmentsNet() { return adjustmentsNet; }
+        public BigDecimal netChange() { return netChange; }
+        public long transactionCount() { return transactionCount; }
+    }
+
+    private static String signedPointsSql(String alias) {
+        return """
+            CASE %s.entry_type
+                WHEN 'CREDIT' THEN %s.points
+                WHEN 'DEBIT' THEN -%s.points
+                WHEN 'EXPIRE' THEN -%s.points
+                WHEN 'REVERSAL' THEN -%s.points
+                WHEN 'ADJUST' THEN %s.points
+                ELSE 0
+            END
+            """.formatted(alias, alias, alias, alias, alias, alias);
+    }
+
     private static String firstCreditEnrolledCte(String programmeEqPl) {
         return """
             first_credit AS (

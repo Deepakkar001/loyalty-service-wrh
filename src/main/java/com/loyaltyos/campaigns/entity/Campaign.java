@@ -120,6 +120,9 @@ public class Campaign {
     @Column(name = "merchant_id", length = 128)
     private String merchantId;
 
+    @Column(name = "pending_merchant_approval", nullable = false)
+    private boolean pendingMerchantApproval = false;
+
     @Column(name = "valid_from", nullable = false)
     private Instant validFrom;
 
@@ -196,6 +199,10 @@ public class Campaign {
     public void setGlobalRewardCap(BigDecimal globalRewardCap) { this.globalRewardCap = globalRewardCap; }
     public String getMerchantId() { return merchantId; }
     public void setMerchantId(String merchantId) { this.merchantId = merchantId; }
+    public boolean isPendingMerchantApproval() { return pendingMerchantApproval; }
+    public void setPendingMerchantApproval(boolean pendingMerchantApproval) {
+        this.pendingMerchantApproval = pendingMerchantApproval;
+    }
     public Instant getValidFrom() { return validFrom; }
     public void setValidFrom(Instant validFrom) { this.validFrom = validFrom; }
     public Instant getValidUntil() { return validUntil; }

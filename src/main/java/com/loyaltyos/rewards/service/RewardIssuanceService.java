@@ -188,6 +188,7 @@ public class RewardIssuanceService {
                     .sourceRuleId(rulePk)
                     .sourceEventId(eventId)
                     .sourceCampaignId(campaignUid)
+                    .merchantUid(normalizeBlank(request.getMerchantUid()))
                     .expiresAt(creditExpiresAt)
                     .description(description)
                     .createdBy("REWARD_ENGINE")

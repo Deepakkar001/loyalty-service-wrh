@@ -10,19 +10,22 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
     "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics",
     "com.loyaltyos.integration", "com.loyaltyos.voucher", "com.loyaltyos.coupon",
-    "com.loyaltyos.referrals", "com.loyaltyos.support"
+    "com.loyaltyos.referrals", "com.loyaltyos.support", "com.loyaltyos.merchants",
+    "com.loyaltyos.access"
 })
 @EntityScan(basePackages = {
     "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
     "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics",
     "com.loyaltyos.integration", "com.loyaltyos.voucher", "com.loyaltyos.coupon",
-    "com.loyaltyos.referrals", "com.loyaltyos.support"
+    "com.loyaltyos.referrals", "com.loyaltyos.support", "com.loyaltyos.merchants",
+    "com.loyaltyos.access"
 })
 @EnableJpaRepositories(basePackages = {
     "com.loyaltyos.onboarding", "com.loyaltyos.campaigns",
     "com.loyaltyos.rules", "com.loyaltyos.rewards", "com.loyaltyos.analytics",
     "com.loyaltyos.integration", "com.loyaltyos.voucher", "com.loyaltyos.coupon",
-    "com.loyaltyos.referrals", "com.loyaltyos.support"
+    "com.loyaltyos.referrals", "com.loyaltyos.support", "com.loyaltyos.merchants",
+    "com.loyaltyos.access"
 })
 @EnableScheduling
 public class TenantOnboardingApplication {

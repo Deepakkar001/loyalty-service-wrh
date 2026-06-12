@@ -544,6 +544,7 @@ public class CampaignService {
         r.setMaxPerCustomer(c.getMaxPerCustomer());
         r.setGlobalRewardCap(c.getGlobalRewardCap());
         r.setMerchantId(c.getMerchantId());
+        r.setPendingMerchantApproval(c.isPendingMerchantApproval());
         r.setValidFrom(c.getValidFrom());
         r.setValidUntil(c.getValidUntil());
         r.setCreatedBy(c.getCreatedBy());

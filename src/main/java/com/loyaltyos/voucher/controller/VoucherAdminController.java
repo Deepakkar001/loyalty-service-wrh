@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -73,6 +74,7 @@ public class VoucherAdminController {
     }
 
     @PostMapping("/batches/upload")
+    @PreAuthorize("hasPermission('voucher_programs.create')")
     public ResponseEntity<VoucherBatchUploadResponse> uploadBatch(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam String programmeUid,

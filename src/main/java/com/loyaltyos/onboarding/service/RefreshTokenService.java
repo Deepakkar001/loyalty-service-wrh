@@ -30,7 +30,7 @@ public class RefreshTokenService {
         this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
     }
 
-    public record RefreshPrincipal(String tenantId, String email, String role) {}
+    public record RefreshPrincipal(String tenantId, String email, String role, String tenantUserId) {}
 
     public String issue(RefreshPrincipal principal) {
         String raw = generateToken();

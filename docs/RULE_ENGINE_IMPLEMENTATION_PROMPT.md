@@ -336,7 +336,7 @@ loyalty:
 cd backend
 ./gradlew.bat flywayInfo
 ./gradlew.bat test
-./gradlew.bat bootRun --args="--spring.profiles.active=local"
+./gradlew.bat bootRun
 ```
 
 **Smoke curl:** `POST /api/v1/engine/rule/evaluate` with a valid JWT (reuse auth from tenant login).

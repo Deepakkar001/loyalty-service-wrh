@@ -17,6 +17,9 @@ import com.loyaltyos.integration.repository.IntegrationEventProcessingLogReposit
 import com.loyaltyos.integration.security.IntegrationHmacVerifier;
 import com.loyaltyos.onboarding.dto.SandboxValidateEventRequest;
 import com.loyaltyos.onboarding.exception.ProgrammeConfigValidationException;
+import com.loyaltyos.merchants.exception.MerchantNotActiveException;
+import com.loyaltyos.merchants.exception.MerchantNotFoundException;
+import com.loyaltyos.merchants.service.MerchantEventValidationService;
 import com.loyaltyos.onboarding.service.IntegrationService;
 import com.loyaltyos.rules.dto.RuleEvaluationResponse;
 import org.springframework.http.HttpStatus;
@@ -36,6 +39,7 @@ public class IntegrationEventService {
 
     private final CampaignOrchestrationService campaignOrchestrationService;
     private final IntegrationService integrationService;
+    private final MerchantEventValidationService merchantEventValidationService;
     private final IntegrationIdempotencyService idempotencyService;
     private final IntegrationResponseMapper responseMapper;
     private final IntegrationEventProcessingLogRepository processingLogRepository;
@@ -44,6 +48,7 @@ public class IntegrationEventService {
     public IntegrationEventService(
         CampaignOrchestrationService campaignOrchestrationService,
         IntegrationService integrationService,
+        MerchantEventValidationService merchantEventValidationService,
         IntegrationIdempotencyService idempotencyService,
         IntegrationResponseMapper responseMapper,
         IntegrationEventProcessingLogRepository processingLogRepository,
@@ -51,6 +56,8 @@ public class IntegrationEventService {
     ) {
         this.campaignOrchestrationService = Objects.requireNonNull(campaignOrchestrationService, "campaignOrchestrationService");
         this.integrationService = Objects.requireNonNull(integrationService, "integrationService");
+        this.merchantEventValidationService = Objects.requireNonNull(
+            merchantEventValidationService, "merchantEventValidationService");
         this.idempotencyService = Objects.requireNonNull(idempotencyService, "idempotencyService");
         this.responseMapper = Objects.requireNonNull(responseMapper, "responseMapper");
         this.processingLogRepository = Objects.requireNonNull(processingLogRepository, "processingLogRepository");
@@ -69,6 +76,8 @@ public class IntegrationEventService {
         if (cached.isPresent()) {
             return buildIdempotentReplay(parsed.eventId(), cached.get());
         }
+
+        validateMerchantIfPresent(tenantId, parsed);
 
         long start = System.currentTimeMillis();
         LoyaltyEventProcessRequest coreReq = toCoreRequest(parsed);
@@ -235,6 +244,20 @@ public class IntegrationEventService {
         return replay;
     }
 
+    private void validateMerchantIfPresent(String tenantId, IntegrationParsedEvent parsed) {
+        String merchantId = merchantEventValidationService.resolveMerchantId(parsed);
+        if (merchantId == null || merchantId.isBlank()) {
+            return;
+        }
+        try {
+            merchantEventValidationService.validateMerchantIsActive(tenantId, merchantId.trim());
+        } catch (MerchantNotActiveException e) {
+            throw new IntegrationApiException(HttpStatus.FORBIDDEN, "MERCHANT_NOT_ACTIVE", e.getMessage(), false);
+        } catch (MerchantNotFoundException e) {
+            throw new IntegrationApiException(HttpStatus.BAD_REQUEST, "MERCHANT_NOT_FOUND", e.getMessage(), false);
+        }
+    }
+
     private LoyaltyEventProcessRequest toCoreRequest(IntegrationParsedEvent parsed) {
         LoyaltyEventProcessRequest core = new LoyaltyEventProcessRequest();
         core.setProgrammeUid(parsed.programmeUid());
@@ -245,7 +268,14 @@ public class IntegrationEventService {
         core.setTransactionId(parsed.eventId());
         core.setAmount(parsed.amount());
         core.setCustomerTierUid(parsed.customerTierUid());
-        core.setMetadata(parsed.metadata().isEmpty() ? null : new LinkedHashMap<>(parsed.metadata()));
+        Map<String, Object> metadata = parsed.metadata().isEmpty()
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(parsed.metadata());
+        String merchantId = merchantEventValidationService.resolveMerchantId(parsed);
+        if (merchantId != null && !merchantId.isBlank()) {
+            metadata.putIfAbsent("merchantId", merchantId);
+        }
+        core.setMetadata(metadata.isEmpty() ? null : metadata);
         core.setEventPayload(parsed.eventPayload());
         return core;
     }

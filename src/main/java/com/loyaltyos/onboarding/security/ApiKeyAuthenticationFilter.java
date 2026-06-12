@@ -9,6 +9,7 @@ import com.loyaltyos.integration.security.IntegrationIpWhitelistMatcher;
 import com.loyaltyos.integration.service.IntegrationAuditService;
 import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
 import com.loyaltyos.integration.service.IntegrationRateLimitService;
+import com.loyaltyos.access.service.AccessResolutionService;
 import com.loyaltyos.onboarding.entity.TenantApiKey;
 import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
 import com.loyaltyos.onboarding.enums.ApiKeyStatus;
@@ -46,19 +47,22 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     private final IntegrationRateLimitService rateLimitService;
     private final IntegrationAuditService auditService;
     private final ObjectMapper objectMapper;
+    private final AccessResolutionService accessResolutionService;
 
     public ApiKeyAuthenticationFilter(
         TenantApiKeyRepository tenantApiKeyRepository,
         IntegrationCredentialCryptoService cryptoService,
         IntegrationRateLimitService rateLimitService,
         IntegrationAuditService auditService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        AccessResolutionService accessResolutionService
     ) {
         this.tenantApiKeyRepository = Objects.requireNonNull(tenantApiKeyRepository, "tenantApiKeyRepository");
         this.cryptoService = Objects.requireNonNull(cryptoService, "cryptoService");
         this.rateLimitService = Objects.requireNonNull(rateLimitService, "rateLimitService");
         this.auditService = Objects.requireNonNull(auditService, "auditService");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.accessResolutionService = Objects.requireNonNull(accessResolutionService, "accessResolutionService");
     }
 
     @Override
@@ -97,6 +101,12 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             TenantApiKey apiKeyEntity = keyOpt.get();
             if (pathTenantId != null && !pathTenantId.equals(apiKeyEntity.getTenantId())) {
                 writeError(wrapped, response, 403, "FORBIDDEN", "API key does not match tenant", false, start, requestId, apiKeyEntity);
+                return;
+            }
+
+            if (!accessResolutionService.isModuleEntitled(apiKeyEntity.getTenantId(), "integrations")) {
+                writeError(wrapped, response, 403, "MODULE_NOT_ENTITLED",
+                    "Integrations module is not enabled for this tenant", false, start, requestId, apiKeyEntity);
                 return;
             }
 

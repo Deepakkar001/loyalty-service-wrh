@@ -7,4 +7,4 @@ if ($null -ne $c) {
 
 # Start backend
 Set-Location C:\Coding\loyalty\backend
-.\gradlew.bat bootRun --args="--spring.profiles.active=local --server.port=8081"
+.\gradlew.bat bootRun --args="--server.port=8081"

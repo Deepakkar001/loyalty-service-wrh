@@ -11,6 +11,7 @@ public class AppUrlConfig {
      * Example: http://localhost:8081
      */
     private String baseUrl = "http://localhost:8081";
+    private String portalUrl = "http://localhost:3000";
 
     public String getBaseUrl() {
         return baseUrl;
@@ -18,6 +19,14 @@ public class AppUrlConfig {
 
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
+    }
+
+    public String getPortalUrl() {
+        return portalUrl;
+    }
+
+    public void setPortalUrl(String portalUrl) {
+        this.portalUrl = portalUrl;
     }
 }
 

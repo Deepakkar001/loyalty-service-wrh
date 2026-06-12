@@ -7,12 +7,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import com.loyaltyos.access.exception.ModuleNotEntitledException;
 import com.loyaltyos.campaigns.exception.CampaignBadRequestException;
 import com.loyaltyos.campaigns.exception.CampaignConflictException;
 import com.loyaltyos.campaigns.exception.CampaignNotFoundException;
 import com.loyaltyos.integration.exception.IntegrationApiException;
 import com.loyaltyos.referrals.exception.ReferralException;
 import com.loyaltyos.support.exception.SupportException;
+import com.loyaltyos.merchants.exception.InvalidMerchantStateTransitionException;
+import com.loyaltyos.merchants.exception.MerchantAccessDeniedException;
+import com.loyaltyos.merchants.exception.MerchantNotActiveException;
+import com.loyaltyos.merchants.exception.MerchantNotFoundException;
 import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -44,6 +49,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleEmailNotVerified(
             EmailNotVerifiedException ex, WebRequest request) {
         return buildResponse(HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ModuleNotEntitledException.class)
+    public ResponseEntity<ErrorResponse> handleModuleNotEntitled(
+            ModuleNotEntitledException ex, WebRequest request) {
+        return buildResponse(HttpStatus.FORBIDDEN, "MODULE_NOT_ENTITLED", ex.getMessage(), request);
     }
 
     @ExceptionHandler(DuplicateTenantException.class)
@@ -126,6 +137,30 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleVoucherCatalog(
             VoucherCatalogException ex, WebRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MerchantNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantNotFound(
+            MerchantNotFoundException ex, WebRequest request) {
+        return buildResponse(HttpStatus.NOT_FOUND, "MERCHANT_NOT_FOUND", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MerchantNotActiveException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantNotActive(
+            MerchantNotActiveException ex, WebRequest request) {
+        return buildResponse(HttpStatus.FORBIDDEN, "MERCHANT_NOT_ACTIVE", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(InvalidMerchantStateTransitionException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantStateTransition(
+            InvalidMerchantStateTransitionException ex, WebRequest request) {
+        return buildResponse(HttpStatus.CONFLICT, "INVALID_MERCHANT_STATE_TRANSITION", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MerchantAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleMerchantAccessDenied(
+            MerchantAccessDeniedException ex, WebRequest request) {
+        return buildResponse(HttpStatus.FORBIDDEN, "MERCHANT_ACCESS_DENIED", ex.getMessage(), request);
     }
 
     /**

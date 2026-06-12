@@ -36,6 +36,10 @@ public interface CampaignRepository extends JpaRepository<Campaign, Long> {
 
     List<Campaign> findByTenantIdAndStatusOrderByPriorityDescCreatedAtDesc(String tenantId, CampaignStatus status);
 
+    List<Campaign> findByTenantIdAndMerchantIdOrderByCreatedAtDesc(String tenantId, String merchantId);
+
+    List<Campaign> findByTenantIdAndPendingMerchantApprovalTrueOrderByCreatedAtDesc(String tenantId);
+
     List<Campaign> findByTenantIdAndProgrammeUidAndMutualExclGroup(
         String tenantId,
         String programmeUid,

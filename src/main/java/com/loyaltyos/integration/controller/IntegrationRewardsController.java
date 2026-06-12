@@ -15,6 +15,10 @@ import com.loyaltyos.integration.service.IntegrationMetricsService;
 import com.loyaltyos.integration.service.IntegrationRedemptionService;
 import com.loyaltyos.integration.service.IntegrationRewardCatalogService;
 import com.loyaltyos.integration.support.IntegrationAuthSupport;
+import com.loyaltyos.onboarding.exception.ProgrammeInactiveException;
+import com.loyaltyos.rewards.exception.RewardInsufficientBalanceException;
+import com.loyaltyos.rewards.exception.RewardRedemptionLimitExceededException;
+import com.loyaltyos.rewards.exception.RewardRedemptionValidationException;
 import com.loyaltyos.rules.enums.LedgerEntryType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -202,9 +206,41 @@ public class IntegrationRewardsController {
                 .body(body);
         } catch (RuntimeException ex) {
             int processingMs = (int) (System.currentTimeMillis() - start);
+            auditService.logApiRequest(
+                tenantId,
+                auth.keyUid(),
+                IntegrationAuthSupport.requestId(servletRequest),
+                "POST",
+                servletRequest.getRequestURI(),
+                request.getRedemptionId(),
+                request.getCustomerId(),
+                400,
+                processingMs,
+                redemptionErrorCode(ex),
+                ex.getMessage(),
+                payloadHash,
+                IntegrationAuthSupport.clientIp(servletRequest),
+                servletRequest.getHeader("User-Agent")
+            );
             metricsService.recordRequest(tenantId, "redemptions", 400, processingMs);
             throw ex;
         }
+    }
+
+    private static String redemptionErrorCode(RuntimeException ex) {
+        if (ex instanceof RewardInsufficientBalanceException) {
+            return "INSUFFICIENT_BALANCE";
+        }
+        if (ex instanceof RewardRedemptionLimitExceededException) {
+            return "REDEMPTION_LIMIT_EXCEEDED";
+        }
+        if (ex instanceof RewardRedemptionValidationException) {
+            return "VALIDATION_FAILED";
+        }
+        if (ex instanceof ProgrammeInactiveException) {
+            return "PROGRAMME_INACTIVE";
+        }
+        return "REDEMPTION_FAILED";
     }
 
     private void logGet(

@@ -35,6 +35,7 @@ public class CampaignResponse {
     private Integer maxPerCustomer;
     private BigDecimal globalRewardCap;
     private String merchantId;
+    private boolean pendingMerchantApproval;
     private Instant validFrom;
     private Instant validUntil;
     private String createdBy;
@@ -95,6 +96,10 @@ public class CampaignResponse {
     public void setGlobalRewardCap(BigDecimal globalRewardCap) { this.globalRewardCap = globalRewardCap; }
     public String getMerchantId() { return merchantId; }
     public void setMerchantId(String merchantId) { this.merchantId = merchantId; }
+    public boolean isPendingMerchantApproval() { return pendingMerchantApproval; }
+    public void setPendingMerchantApproval(boolean pendingMerchantApproval) {
+        this.pendingMerchantApproval = pendingMerchantApproval;
+    }
     public Instant getValidFrom() { return validFrom; }
     public void setValidFrom(Instant validFrom) { this.validFrom = validFrom; }
     public Instant getValidUntil() { return validUntil; }

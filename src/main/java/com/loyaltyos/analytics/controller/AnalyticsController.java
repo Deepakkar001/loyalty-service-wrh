@@ -8,11 +8,21 @@ import com.loyaltyos.analytics.dto.SegmentAnalysisRow;
 import com.loyaltyos.analytics.dto.TierDistributionRow;
 import com.loyaltyos.analytics.dto.TierUpgradeCohortRow;
 import com.loyaltyos.analytics.dto.TierVelocityBucketRow;
+import com.loyaltyos.analytics.dto.AccrualRedemptionReconciliationResponse;
 import com.loyaltyos.analytics.dto.BreakageExpiryReportResponse;
 import com.loyaltyos.analytics.dto.EnrollmentReportResponse;
+import com.loyaltyos.analytics.dto.FailedAccrualRedemptionReportResponse;
+import com.loyaltyos.analytics.dto.LiabilityReportResponse;
+import com.loyaltyos.analytics.service.AccrualRedemptionReconciliationService;
 import com.loyaltyos.analytics.service.AnalyticsService;
 import com.loyaltyos.analytics.service.BreakageExpiryReportService;
 import com.loyaltyos.analytics.service.EnrollmentReportService;
+import com.loyaltyos.analytics.dto.ReversalsAdjustmentsReportResponse;
+import com.loyaltyos.analytics.dto.SlaPerformanceReportResponse;
+import com.loyaltyos.analytics.service.FailedAccrualRedemptionReportService;
+import com.loyaltyos.analytics.service.LiabilityReportService;
+import com.loyaltyos.analytics.service.ReversalsAdjustmentsReportService;
+import com.loyaltyos.analytics.service.SlaPerformanceReportService;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,11 +46,21 @@ public class AnalyticsController {
     private final AnalyticsService analyticsService;
     private final BreakageExpiryReportService breakageExpiryReportService;
     private final EnrollmentReportService enrollmentReportService;
+    private final AccrualRedemptionReconciliationService accrualRedemptionReconciliationService;
+    private final LiabilityReportService liabilityReportService;
+    private final FailedAccrualRedemptionReportService failedAccrualRedemptionReportService;
+    private final ReversalsAdjustmentsReportService reversalsAdjustmentsReportService;
+    private final SlaPerformanceReportService slaPerformanceReportService;
 
     public AnalyticsController(
         AnalyticsService analyticsService,
         BreakageExpiryReportService breakageExpiryReportService,
-        EnrollmentReportService enrollmentReportService
+        EnrollmentReportService enrollmentReportService,
+        AccrualRedemptionReconciliationService accrualRedemptionReconciliationService,
+        LiabilityReportService liabilityReportService,
+        FailedAccrualRedemptionReportService failedAccrualRedemptionReportService,
+        ReversalsAdjustmentsReportService reversalsAdjustmentsReportService,
+        SlaPerformanceReportService slaPerformanceReportService
     ) {
         this.analyticsService = Objects.requireNonNull(analyticsService, "analyticsService");
         this.breakageExpiryReportService = Objects.requireNonNull(
@@ -50,6 +70,23 @@ public class AnalyticsController {
         this.enrollmentReportService = Objects.requireNonNull(
             enrollmentReportService,
             "enrollmentReportService"
+        );
+        this.accrualRedemptionReconciliationService = Objects.requireNonNull(
+            accrualRedemptionReconciliationService,
+            "accrualRedemptionReconciliationService"
+        );
+        this.liabilityReportService = Objects.requireNonNull(liabilityReportService, "liabilityReportService");
+        this.failedAccrualRedemptionReportService = Objects.requireNonNull(
+            failedAccrualRedemptionReportService,
+            "failedAccrualRedemptionReportService"
+        );
+        this.reversalsAdjustmentsReportService = Objects.requireNonNull(
+            reversalsAdjustmentsReportService,
+            "reversalsAdjustmentsReportService"
+        );
+        this.slaPerformanceReportService = Objects.requireNonNull(
+            slaPerformanceReportService,
+            "slaPerformanceReportService"
         );
     }
 
@@ -63,6 +100,91 @@ public class AnalyticsController {
     ) {
         return ResponseEntity.ok(
             enrollmentReportService.buildReport(TenantJwt.tenantId(jwt), programmeUid, from, to)
+        );
+    }
+
+    @GetMapping("/reports/accrual-redemption-reconciliation")
+    @Operation(summary = "Accrual vs redemption liability reconciliation report")
+    public ResponseEntity<AccrualRedemptionReconciliationResponse> accrualRedemptionReconciliation(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            accrualRedemptionReconciliationService.buildReport(
+                TenantJwt.tenantId(jwt),
+                programmeUid,
+                from,
+                to
+            )
+        );
+    }
+
+    @GetMapping("/reports/liability")
+    @Operation(summary = "Loyalty liability movement and roll-up report")
+    public ResponseEntity<LiabilityReportResponse> liabilityReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            liabilityReportService.buildReport(TenantJwt.tenantId(jwt), programmeUid, from, to)
+        );
+    }
+
+    @GetMapping("/reports/failed-accruals-redemptions")
+    @Operation(summary = "Failed accruals and redemptions operational report")
+    public ResponseEntity<FailedAccrualRedemptionReportResponse> failedAccrualsRedemptionsReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            failedAccrualRedemptionReportService.buildReport(
+                TenantJwt.tenantId(jwt),
+                programmeUid,
+                from,
+                to
+            )
+        );
+    }
+
+    @GetMapping("/reports/sla-performance")
+    @Operation(summary = "Loyalty-engine SLA and performance metrics report")
+    public ResponseEntity<SlaPerformanceReportResponse> slaPerformanceReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            slaPerformanceReportService.buildReport(
+                TenantJwt.tenantId(jwt),
+                programmeUid,
+                from,
+                to
+            )
+        );
+    }
+
+    @GetMapping("/reports/reversals-adjustments")
+    @Operation(summary = "Reversals and adjustments operational report")
+    public ResponseEntity<ReversalsAdjustmentsReportResponse> reversalsAdjustmentsReport(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestParam(value = "programmeUid", defaultValue = "default") String programmeUid,
+        @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+        @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ResponseEntity.ok(
+            reversalsAdjustmentsReportService.buildReport(
+                TenantJwt.tenantId(jwt),
+                programmeUid,
+                from,
+                to
+            )
         );
     }
 

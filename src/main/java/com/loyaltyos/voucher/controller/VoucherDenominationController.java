@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,6 +39,7 @@ public class VoucherDenominationController {
     }
 
     @PutMapping
+    @PreAuthorize("hasPermission('voucher_programs.edit')")
     public ResponseEntity<DenominationMappingsResponse> replaceMappings(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody ReplaceDenominationMappingsRequest request,

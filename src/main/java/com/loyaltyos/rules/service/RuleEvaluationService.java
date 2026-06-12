@@ -20,6 +20,7 @@ import com.loyaltyos.rewards.catalog.RewardCatalogItem;
 import com.loyaltyos.rewards.catalog.RewardCatalogService;
 import com.loyaltyos.campaigns.model.CampaignEventContext;
 import com.loyaltyos.campaigns.service.CampaignRuleRuntimeGuard;
+import com.loyaltyos.merchants.service.MerchantEarnRateService;
 import com.loyaltyos.rules.repository.EarnRuleRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Objects;
@@ -61,6 +62,7 @@ public class RuleEvaluationService {
     private final RewardCatalogService rewardCatalogService;
     private final ObjectProvider<MeterRegistry> meterRegistry;
     private final CampaignRuleRuntimeGuard campaignRuleRuntimeGuard;
+    private final MerchantEarnRateService merchantEarnRateService;
 
     public RuleEvaluationService(
         EarnRuleRepository earnRuleRepository,
@@ -74,7 +76,8 @@ public class RuleEvaluationService {
         RuleEarningCapService ruleEarningCapService,
         RewardCatalogService rewardCatalogService,
         ObjectProvider<MeterRegistry> meterRegistry,
-        CampaignRuleRuntimeGuard campaignRuleRuntimeGuard
+        CampaignRuleRuntimeGuard campaignRuleRuntimeGuard,
+        MerchantEarnRateService merchantEarnRateService
     ) {
         this.earnRuleRepository = Objects.requireNonNull(earnRuleRepository, "earnRuleRepository");
         this.programmeRuleContextLoader = Objects.requireNonNull(programmeRuleContextLoader, "programmeRuleContextLoader");
@@ -88,6 +91,7 @@ public class RuleEvaluationService {
         this.rewardCatalogService = Objects.requireNonNull(rewardCatalogService, "rewardCatalogService");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
         this.campaignRuleRuntimeGuard = Objects.requireNonNull(campaignRuleRuntimeGuard, "campaignRuleRuntimeGuard");
+        this.merchantEarnRateService = Objects.requireNonNull(merchantEarnRateService, "merchantEarnRateService");
     }
 
     @Transactional(readOnly = true)
@@ -130,7 +134,7 @@ public class RuleEvaluationService {
 
         try {
             ProgrammeEvaluationContext progCtx = programmeRuleContextLoader.load(tenantId, programmeUid, request.getCustomerTierUid());
-            Map<String, Object> eventMap = buildEventMap(request);
+            Map<String, Object> eventMap = buildEventMap(tenantId, request);
             Map<String, Object> customerMap = buildCustomerMap(request, progCtx);
             Map<String, Object> tenantMap = progCtx.asTenantVariableMap();
 
@@ -159,7 +163,9 @@ public class RuleEvaluationService {
 
             BigDecimal baseThisRule = sumAwardPointsBase(snapshot, eventMap, customerMap, tenantMap, now);
             BigDecimal tierMult = progCtx.getResolvedTierMultiplier();
-            BigDecimal pointsThisRule = baseThisRule.multiply(tierMult).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal merchantMult = merchantEarnRateService.resolveMultiplier(tenantId, request.getMerchantId());
+            BigDecimal pointsThisRule = baseThisRule.multiply(tierMult).multiply(merchantMult)
+                .setScale(4, RoundingMode.HALF_UP);
 
             List<MatchOutcome> outcomes = List.of(new MatchOutcome(snapshot, baseThisRule, pointsThisRule));
             List<RuleEvaluationResponse.SuppressedRuleInfo> suppressed = new ArrayList<>();
@@ -222,7 +228,7 @@ public class RuleEvaluationService {
                 "allowRuleOverride", progCtx.isAllowRuleOverride()
             )));
 
-            Map<String, Object> eventMap = buildEventMap(request);
+            Map<String, Object> eventMap = buildEventMap(tenantId, request);
             Map<String, Object> customerMap = buildCustomerMap(request, progCtx);
             Map<String, Object> tenantMap = progCtx.asTenantVariableMap();
 
@@ -255,7 +261,9 @@ public class RuleEvaluationService {
                 }
                 BigDecimal baseThisRule = sumAwardPointsBase(rule, eventMap, customerMap, tenantMap, now);
                 BigDecimal tierMult = progCtx.getResolvedTierMultiplier();
-                BigDecimal pointsThisRule = baseThisRule.multiply(tierMult).setScale(4, RoundingMode.HALF_UP);
+                BigDecimal merchantMult = merchantEarnRateService.resolveMultiplier(tenantId, request.getMerchantId());
+                BigDecimal pointsThisRule = baseThisRule.multiply(tierMult).multiply(merchantMult)
+                    .setScale(4, RoundingMode.HALF_UP);
                 outcomes.add(new MatchOutcome(rule, baseThisRule, pointsThisRule));
 
                 ExecutionMode mode = parseMode(rule.getExecutionMode());
@@ -763,12 +771,19 @@ public class RuleEvaluationService {
         }
     }
 
-    private Map<String, Object> buildEventMap(RuleEvaluateRequest request) {
+    private Map<String, Object> buildEventMap(String tenantId, RuleEvaluateRequest request) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("amount", request.getAmount());
         m.put("eventType", request.getEventType());
         m.put("channel", request.getChannel());
         m.put("merchantId", request.getMerchantId());
+        if (request.getMerchantId() != null && !request.getMerchantId().isBlank()) {
+            BigDecimal merchantMult = merchantEarnRateService.resolveMultiplier(tenantId, request.getMerchantId());
+            m.put("merchant", Map.of(
+                "uid", request.getMerchantId(),
+                "earnRateMultiplier", merchantMult
+            ));
+        }
         if (request.getEventPayload() != null && request.getEventPayload().isObject()) {
             request.getEventPayload().fields().forEachRemaining(e -> m.put(e.getKey(), jsonScalar(e.getValue())));
         }

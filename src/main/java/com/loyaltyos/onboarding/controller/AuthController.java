@@ -1,5 +1,6 @@
 package com.loyaltyos.onboarding.controller;
 
+import com.loyaltyos.onboarding.dto.AcceptInviteRequest;
 import com.loyaltyos.onboarding.dto.LoginRequest;
 import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.security.JwtProperties;
@@ -51,6 +52,16 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
         var result = authService.refresh(refreshToken);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
+            .body(result.response());
+    }
+
+    @PostMapping("/accept-invite")
+    @Operation(summary = "Accept team invite",
+        description = "Sets password for an invited tenant user and returns a login session.")
+    public ResponseEntity<LoginResponse> acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        var result = authService.acceptInvite(request);
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
             .body(result.response());

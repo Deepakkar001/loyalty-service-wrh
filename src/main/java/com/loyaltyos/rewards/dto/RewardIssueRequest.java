@@ -36,6 +36,9 @@ public class RewardIssueRequest {
     @Size(max = 256)
     private String narrative;
 
+    @Size(max = 128)
+    private String merchantUid;
+
     public RewardIssueRequest() {}
 
     public String getProgrammeUid() {
@@ -76,5 +79,13 @@ public class RewardIssueRequest {
 
     public void setNarrative(String narrative) {
         this.narrative = narrative;
+    }
+
+    public String getMerchantUid() {
+        return merchantUid;
+    }
+
+    public void setMerchantUid(String merchantUid) {
+        this.merchantUid = merchantUid;
     }
 }

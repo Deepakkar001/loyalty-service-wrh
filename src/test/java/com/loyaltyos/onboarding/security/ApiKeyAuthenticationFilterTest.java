@@ -5,6 +5,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.loyaltyos.integration.security.IntegrationHmacVerifier;
 import com.loyaltyos.integration.service.IntegrationAuditService;
 import com.loyaltyos.integration.service.IntegrationCredentialCryptoService;
+import com.loyaltyos.access.service.AccessResolutionService;
 import com.loyaltyos.integration.service.IntegrationRateLimitService;
 import com.loyaltyos.onboarding.entity.TenantApiKey;
 import com.loyaltyos.onboarding.enums.ApiKeyEnvironment;
@@ -77,7 +78,7 @@ class ApiKeyAuthenticationFilterTest {
         IntegrationRateLimitService.RateLimitResult.allowed(1000, 999));
 
     ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
-        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper());
+        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper(), entitledAccess());
 
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/integration/t1/events/process");
     request.addHeader("Authorization", "Bearer " + apiKey);
@@ -119,7 +120,7 @@ class ApiKeyAuthenticationFilterTest {
         IntegrationRateLimitService.RateLimitResult.allowed(1000, 999));
 
     ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
-        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper());
+        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper(), entitledAccess());
 
     MockHttpServletRequest request = new MockHttpServletRequest(
         "GET", "/api/v1/integration/t1/events/evt_postman_001");
@@ -162,7 +163,7 @@ class ApiKeyAuthenticationFilterTest {
         IntegrationRateLimitService.RateLimitResult.allowed(1000, 999));
 
     ApiKeyAuthenticationFilter filter = new ApiKeyAuthenticationFilter(
-        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper());
+        keyRepo, crypto, rateLimit, mock(IntegrationAuditService.class), objectMapper(), entitledAccess());
 
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/integration/t1/events/validate");
     request.addHeader("Authorization", "Bearer " + apiKey);
@@ -184,8 +185,15 @@ class ApiKeyAuthenticationFilterTest {
         mock(IntegrationCredentialCryptoService.class),
         mock(IntegrationRateLimitService.class),
         mock(IntegrationAuditService.class),
-        objectMapper()
+        objectMapper(),
+        entitledAccess()
     );
+  }
+
+  private static AccessResolutionService entitledAccess() {
+    AccessResolutionService access = mock(AccessResolutionService.class);
+    when(access.isModuleEntitled(anyString(), eq("integrations"))).thenReturn(true);
+    return access;
   }
 
   private static ObjectMapper objectMapper() {

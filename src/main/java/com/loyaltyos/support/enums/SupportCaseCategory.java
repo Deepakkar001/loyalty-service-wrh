@@ -7,5 +7,6 @@ public enum SupportCaseCategory {
     VOUCHERS,
     BILLING,
     GO_LIVE,
+    MODULE_ACCESS_REQUEST,
     OTHER
 }

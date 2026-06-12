@@ -2,7 +2,9 @@ package com.loyaltyos.referrals.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.referrals.dto.ReferralEffectivenessReportResponse;
+import com.loyaltyos.referrals.dto.ReferralEffectivenessTrendRow;
 import com.loyaltyos.referrals.dto.ReferralFunnelStageRow;
+import com.loyaltyos.referrals.dto.ReferralProgrammeComparisonRow;
 import com.loyaltyos.referrals.dto.ReferralPeriodMetrics;
 import com.loyaltyos.referrals.dto.ReferralTimeToPurchaseResponse;
 import com.loyaltyos.referrals.dto.ReferralTopReferrerResponse;
@@ -246,5 +248,84 @@ public class ReferralAnalyticsService {
 
     private static String normalize(String programmeUid) {
         return programmeUid == null || programmeUid.isBlank() ? "default" : programmeUid.trim();
+    }
+
+    @Transactional(readOnly = true)
+    public void streamEffectivenessReportCsv(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        java.util.function.Consumer<String> lineConsumer
+    ) {
+        ReferralEffectivenessReportResponse report = buildEffectivenessReport(tenantId, programmeUid, from, to);
+        ReferralPeriodMetrics period = report.getPeriodMetrics();
+        lineConsumer.accept(csvJoin(
+            "SUMMARY",
+            String.valueOf(period.totalReferrals()),
+            String.valueOf(period.signedUp()),
+            String.valueOf(period.rewarded()),
+            String.valueOf(period.withPurchase()),
+            decimal(period.conversionRatePercent()),
+            decimal(report.getRewardCostInCurrency()),
+            decimal(report.getNetRefereeValue())
+        ));
+        for (ReferralFunnelStageRow row : report.getFunnel()) {
+            lineConsumer.accept(csvJoin(
+                "FUNNEL",
+                row.getStage(),
+                String.valueOf(row.getCount()),
+                decimal(row.getSharePercent())
+            ));
+        }
+        for (ReferralEffectivenessTrendRow row : report.getDailyTrends()) {
+            lineConsumer.accept(csvJoin(
+                "DAILY",
+                row.getPeriodStart(),
+                String.valueOf(row.getReferrals()),
+                String.valueOf(row.getRewarded()),
+                decimal(row.getConversionRatePercent()),
+                decimal(row.getRefereeSpend())
+            ));
+        }
+        for (ReferralTopReferrerResponse row : report.getTopReferrers()) {
+            lineConsumer.accept(csvJoin(
+                "TOP_REFERRER",
+                row.getReferrerCustomerId(),
+                String.valueOf(row.getReferralCount()),
+                String.valueOf(row.getRewardedCount()),
+                decimal(row.getTotalRefereeSpend()),
+                decimal(row.getPointsEarned()),
+                decimal(row.getConversionRatePercent())
+            ));
+        }
+        for (ReferralProgrammeComparisonRow row : report.getProgrammeComparisons()) {
+            lineConsumer.accept(csvJoin(
+                "PROGRAMME",
+                row.getProgrammeUid(),
+                row.getProgrammeName(),
+                String.valueOf(row.getTotalReferrals()),
+                decimal(row.getConversionRatePercent())
+            ));
+        }
+    }
+
+    private static String csvJoin(String... cells) {
+        return String.join(",", java.util.Arrays.stream(cells).map(ReferralAnalyticsService::csvCell).toList());
+    }
+
+    private static String decimal(BigDecimal value) {
+        return value == null ? "0" : value.toPlainString();
+    }
+
+    private static String csvCell(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String v = raw.replace("\"", "\"\"");
+        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+            return "\"" + v + "\"";
+        }
+        return v;
     }
 }

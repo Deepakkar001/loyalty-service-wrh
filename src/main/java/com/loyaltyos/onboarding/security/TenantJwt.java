@@ -31,6 +31,25 @@ public final class TenantJwt {
         return v == null ? null : v.toString();
     }
 
+    public static String tenantUserId(Jwt jwt) {
+        if (jwt == null) {
+            return null;
+        }
+        Object v = jwt.getClaims().get("tenantUserId");
+        return v == null ? null : v.toString();
+    }
+
+    public static Integer sessionVersion(Jwt jwt) {
+        if (jwt == null) {
+            return null;
+        }
+        Object v = jwt.getClaims().get("sessionVersion");
+        if (v instanceof Number n) {
+            return n.intValue();
+        }
+        return v == null ? null : Integer.parseInt(v.toString());
+    }
+
     /** Returns "admin" or "tenant" (defaults to "tenant" if absent). */
     public static String type(Jwt jwt) {
         if (jwt == null) {
@@ -83,5 +102,38 @@ public final class TenantJwt {
 
     public static String requireTenantId(Authentication authentication) {
         return requireTenantId(resolve(authentication));
+    }
+
+    public static boolean isMerchant(Jwt jwt) {
+        return jwt != null && "merchant".equals(type(jwt));
+    }
+
+    public static String merchantUid(Jwt jwt) {
+        if (jwt == null) {
+            return null;
+        }
+        Object claim = jwt.getClaims().get("merchantUid");
+        if (claim != null && !claim.toString().isBlank()) {
+            return claim.toString().trim();
+        }
+        return jwt.getSubject();
+    }
+
+    public static String requireMerchantUid(Jwt jwt) {
+        if (jwt == null || !isMerchant(jwt)) {
+            throw new IllegalArgumentException("Merchant authentication required");
+        }
+        String uid = merchantUid(jwt);
+        if (uid == null || uid.isBlank()) {
+            throw new IllegalArgumentException("Merchant context is missing from your session");
+        }
+        return uid.trim();
+    }
+
+    public static String requireTenantAdmin(Jwt jwt) {
+        if (jwt == null || isMerchant(jwt)) {
+            throw new IllegalArgumentException("Tenant admin authentication required");
+        }
+        return requireTenantId(jwt);
     }
 }
