@@ -1,6 +1,7 @@
 package com.loyaltyos.onboarding.controller;
 
 import com.loyaltyos.onboarding.dto.AcceptInviteRequest;
+import com.loyaltyos.onboarding.dto.ChangePasswordRequest;
 import com.loyaltyos.onboarding.dto.LoginRequest;
 import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.security.JwtProperties;
@@ -12,6 +13,7 @@ import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,6 +54,19 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
         var result = authService.refresh(refreshToken);
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
+            .body(result.response());
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change password",
+        description = "Updates the signed-in tenant user's password. Required after signing in with a temporary invite password.")
+    public ResponseEntity<LoginResponse> changePassword(
+        Authentication authentication,
+        @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        var result = authService.changePassword(authentication, request);
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
             .body(result.response());

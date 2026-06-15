@@ -10,6 +10,8 @@ public class ModuleCatalogItemDto {
     private boolean preSelected;
     private boolean locked;
     private Boolean enabled;
+    /** ONBOARDING, PLATFORM_ADMIN, MIGRATION, etc. — set when tenant has an entitlement row. */
+    private String entitlementSource;
 
     public String getModuleKey() { return moduleKey; }
     public void setModuleKey(String moduleKey) { this.moduleKey = moduleKey; }
@@ -27,4 +29,6 @@ public class ModuleCatalogItemDto {
     public void setLocked(boolean locked) { this.locked = locked; }
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public String getEntitlementSource() { return entitlementSource; }
+    public void setEntitlementSource(String entitlementSource) { this.entitlementSource = entitlementSource; }
 }

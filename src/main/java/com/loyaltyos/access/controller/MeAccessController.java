@@ -2,6 +2,7 @@ package com.loyaltyos.access.controller;
 
 import com.loyaltyos.access.dto.MeAccessResponse;
 import com.loyaltyos.access.repository.TenantUserRepository;
+import com.loyaltyos.access.service.AccessProvisioningService;
 import com.loyaltyos.access.service.AccessResolutionService;
 import com.loyaltyos.onboarding.security.TenantJwt;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,10 +21,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class MeAccessController {
 
     private final AccessResolutionService accessResolutionService;
+    private final AccessProvisioningService accessProvisioningService;
     private final TenantUserRepository userRepository;
 
-    public MeAccessController(AccessResolutionService accessResolutionService, TenantUserRepository userRepository) {
+    public MeAccessController(
+        AccessResolutionService accessResolutionService,
+        AccessProvisioningService accessProvisioningService,
+        TenantUserRepository userRepository
+    ) {
         this.accessResolutionService = accessResolutionService;
+        this.accessProvisioningService = accessProvisioningService;
         this.userRepository = userRepository;
     }
 
@@ -38,6 +45,11 @@ public class MeAccessController {
                 .map(u -> u.getUserId())
                 .orElseThrow(() -> new IllegalStateException("Tenant user not found"));
         }
+        accessProvisioningService.prepareUserAccessContext(
+            tenantId,
+            tenantUserId,
+            TenantJwt.email(jwt)
+        );
         return accessResolutionService.resolveForUser(tenantId, tenantUserId);
     }
 }

@@ -67,7 +67,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/programmes")
-    @PreAuthorize("hasPermission('referrals.create')")
+    @PreAuthorize("hasPermission(null, 'referrals.create')")
     public ResponseEntity<Map<String, Object>> upsertProgramme(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody ReferralProgrammeUpsertRequest request
@@ -148,7 +148,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/approve")
-    @PreAuthorize("hasPermission('referrals.approve')")
+    @PreAuthorize("hasPermission(null, 'referrals.approve')")
     public ResponseEntity<Map<String, String>> approveFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,
@@ -161,7 +161,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/reject")
-    @PreAuthorize("hasPermission('referrals.approve')")
+    @PreAuthorize("hasPermission(null, 'referrals.approve')")
     public ResponseEntity<Map<String, String>> rejectFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,
@@ -174,7 +174,7 @@ public class ReferralAdminController {
     }
 
     @PostMapping("/fraud-queue/{referralUid}/override")
-    @PreAuthorize("hasPermission('referrals.approve')")
+    @PreAuthorize("hasPermission(null, 'referrals.approve')")
     public ResponseEntity<Map<String, String>> overrideFraud(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String referralUid,

@@ -172,12 +172,44 @@ public class AgreementApprovalService {
     }
 
     private void sendApprovalNotification(TenantAgreement agreement, String approvalNotes) {
-        tenantRepository.findByTenantId(agreement.getTenantId()).ifPresent(tenant ->
-                notificationMailer.sendApprovalEmail(tenant.getEmail(), tenant.getCompanyName(), approvalNotes));
+        tenantRepository.findByTenantId(agreement.getTenantId()).ifPresentOrElse(
+            tenant -> {
+                boolean sent = notificationMailer.sendApprovalEmail(
+                    tenant.getEmail(), tenant.getCompanyName(), approvalNotes);
+                if (!sent) {
+                    log.warn(
+                        "Agreement approval email was not delivered to {} (tenant {})",
+                        tenant.getEmail(),
+                        agreement.getTenantId()
+                    );
+                }
+            },
+            () -> log.warn(
+                "Agreement approval email skipped — tenant {} not found for agreement {}",
+                agreement.getTenantId(),
+                agreement.getAgreementUid()
+            )
+        );
     }
 
     private void sendRejectionNotification(TenantAgreement agreement, String reason) {
-        tenantRepository.findByTenantId(agreement.getTenantId()).ifPresent(tenant ->
-                notificationMailer.sendRejectionEmail(tenant.getEmail(), tenant.getCompanyName(), reason));
+        tenantRepository.findByTenantId(agreement.getTenantId()).ifPresentOrElse(
+            tenant -> {
+                boolean sent = notificationMailer.sendRejectionEmail(
+                    tenant.getEmail(), tenant.getCompanyName(), reason);
+                if (!sent) {
+                    log.warn(
+                        "Agreement rejection email was not delivered to {} (tenant {})",
+                        tenant.getEmail(),
+                        agreement.getTenantId()
+                    );
+                }
+            },
+            () -> log.warn(
+                "Agreement rejection email skipped — tenant {} not found for agreement {}",
+                agreement.getTenantId(),
+                agreement.getAgreementUid()
+            )
+        );
     }
 }

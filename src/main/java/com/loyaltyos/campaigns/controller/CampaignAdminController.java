@@ -54,7 +54,7 @@ public class CampaignAdminController {
     }
 
     @PostMapping
-    @PreAuthorize("hasPermission('campaigns.create')")
+    @PreAuthorize("hasPermission(null, 'campaigns.create')")
     public ResponseEntity<CampaignResponse> create(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody CampaignUpsertRequest body
@@ -94,7 +94,7 @@ public class CampaignAdminController {
     }
 
     @PutMapping("/{campaignUid}")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> update(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -106,7 +106,7 @@ public class CampaignAdminController {
     }
 
     @PostMapping("/{campaignUid}/activate")
-    @PreAuthorize("hasPermission('campaigns.publish')")
+    @PreAuthorize("hasPermission(null, 'campaigns.publish')")
     public ResponseEntity<CampaignResponse> activate(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid
@@ -116,7 +116,7 @@ public class CampaignAdminController {
     }
 
     @PostMapping("/{campaignUid}/pause")
-    @PreAuthorize("hasPermission('campaigns.publish')")
+    @PreAuthorize("hasPermission(null, 'campaigns.publish')")
     public ResponseEntity<CampaignResponse> pause(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid
@@ -126,7 +126,7 @@ public class CampaignAdminController {
     }
 
     @PostMapping("/{campaignUid}/end")
-    @PreAuthorize("hasPermission('campaigns.publish')")
+    @PreAuthorize("hasPermission(null, 'campaigns.publish')")
     public ResponseEntity<CampaignResponse> end(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid
@@ -145,7 +145,7 @@ public class CampaignAdminController {
     }
 
     @PutMapping("/{campaignUid}/event-schema")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> upsertEventSchema(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -156,7 +156,7 @@ public class CampaignAdminController {
     }
 
     @PatchMapping("/{campaignUid}/event-schema/events/{eventType}")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> patchEventDefinition(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -168,7 +168,7 @@ public class CampaignAdminController {
     }
 
     @PostMapping("/{campaignUid}/event-schema/events")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> addEventDefinition(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -179,7 +179,7 @@ public class CampaignAdminController {
     }
 
     @DeleteMapping("/{campaignUid}/event-schema/events/{eventType}")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> removeEventDefinition(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -190,7 +190,7 @@ public class CampaignAdminController {
     }
 
     @PatchMapping("/{campaignUid}/event-schema/settings")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignResponse> patchEventSchemaSettings(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,

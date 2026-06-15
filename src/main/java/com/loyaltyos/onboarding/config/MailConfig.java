@@ -59,7 +59,20 @@ public class MailConfig {
         }
         sender.setJavaMailProperties(javaMailProps);
 
-        if (hasCreds) return sender;
+        if (hasCreds) {
+            log.info(
+                "SMTP configured for outbound email (host={}, port={}, user={})",
+                props.getHost(),
+                props.getPort(),
+                props.getUsername()
+            );
+            return sender;
+        }
+
+        log.warn(
+            "SMTP username/password not set — outbound email will NOT be delivered. "
+                + "Set SPRING_MAIL_USERNAME and SPRING_MAIL_PASSWORD (or application-secrets.yml)."
+        );
 
         return new JavaMailSenderImpl() {
             {

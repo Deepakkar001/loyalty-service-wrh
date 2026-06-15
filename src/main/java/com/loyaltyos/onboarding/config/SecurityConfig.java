@@ -1,5 +1,6 @@
 package com.loyaltyos.onboarding.config;
 
+import com.loyaltyos.access.security.MustChangePasswordFilter;
 import com.loyaltyos.access.security.TenantModuleAccessFilter;
 import com.loyaltyos.access.security.TenantSessionVersionFilter;
 import com.loyaltyos.onboarding.security.ApiKeyAuthenticationFilter;
@@ -34,15 +35,18 @@ public class SecurityConfig {
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
     private final TenantModuleAccessFilter tenantModuleAccessFilter;
     private final TenantSessionVersionFilter tenantSessionVersionFilter;
+    private final MustChangePasswordFilter mustChangePasswordFilter;
 
     public SecurityConfig(
         ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
         TenantModuleAccessFilter tenantModuleAccessFilter,
-        TenantSessionVersionFilter tenantSessionVersionFilter
+        TenantSessionVersionFilter tenantSessionVersionFilter,
+        MustChangePasswordFilter mustChangePasswordFilter
     ) {
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
         this.tenantModuleAccessFilter = tenantModuleAccessFilter;
         this.tenantSessionVersionFilter = tenantSessionVersionFilter;
+        this.mustChangePasswordFilter = mustChangePasswordFilter;
     }
 
     @Bean
@@ -74,6 +78,7 @@ public class SecurityConfig {
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
             .addFilterAfter(tenantModuleAccessFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
             .addFilterAfter(tenantSessionVersionFilter, TenantModuleAccessFilter.class)
+            .addFilterAfter(mustChangePasswordFilter, TenantSessionVersionFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/v1/auth/login",

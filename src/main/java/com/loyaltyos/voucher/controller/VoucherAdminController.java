@@ -74,7 +74,7 @@ public class VoucherAdminController {
     }
 
     @PostMapping("/batches/upload")
-    @PreAuthorize("hasPermission('voucher_programs.create')")
+    @PreAuthorize("hasPermission(null, 'voucher_programs.create')")
     public ResponseEntity<VoucherBatchUploadResponse> uploadBatch(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam String programmeUid,

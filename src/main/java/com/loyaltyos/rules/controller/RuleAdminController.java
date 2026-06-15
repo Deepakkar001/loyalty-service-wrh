@@ -46,7 +46,7 @@ public class RuleAdminController {
     }
 
     @PostMapping("/rules")
-    @PreAuthorize("hasPermission('loyalty_rules.create')")
+    @PreAuthorize("hasPermission(null, 'loyalty_rules.create')")
     public ResponseEntity<EarnRuleResponse> createRule(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody RuleUpsertRequest body
@@ -89,7 +89,7 @@ public class RuleAdminController {
     }
 
     @PutMapping("/rules/{ruleUid}")
-    @PreAuthorize("hasPermission('loyalty_rules.edit')")
+    @PreAuthorize("hasPermission(null, 'loyalty_rules.edit')")
     public ResponseEntity<EarnRuleResponse> updateRule(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("ruleUid") String ruleUid,
@@ -101,7 +101,7 @@ public class RuleAdminController {
     }
 
     @DeleteMapping("/rules/{ruleUid}")
-    @PreAuthorize("hasPermission('loyalty_rules.delete')")
+    @PreAuthorize("hasPermission(null, 'loyalty_rules.delete')")
     @io.swagger.v3.oas.annotations.Operation(summary = "Remove rule from My Rules (soft archive)",
         description = "Sets status to ARCHIVED. Rule history is retained; archived rules no longer run in evaluation.")
     public ResponseEntity<Void> deleteRule(
@@ -124,7 +124,7 @@ public class RuleAdminController {
     }
 
     @PatchMapping("/rules/{ruleUid}/status")
-    @PreAuthorize("hasPermission('loyalty_rules.publish')")
+    @PreAuthorize("hasPermission(null, 'loyalty_rules.publish')")
     public ResponseEntity<EarnRuleResponse> patchStatus(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("ruleUid") String ruleUid,

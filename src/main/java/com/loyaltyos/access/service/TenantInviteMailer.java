@@ -1,53 +1,61 @@
 package com.loyaltyos.access.service;
 
 import com.loyaltyos.onboarding.config.AppUrlConfig;
+import com.loyaltyos.onboarding.service.PlatformEmailService;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 @Service
 public class TenantInviteMailer {
 
-    private static final Logger log = LoggerFactory.getLogger(TenantInviteMailer.class);
-
-    private final JavaMailSender mailSender;
+    private final PlatformEmailService emailService;
     private final AppUrlConfig appUrlConfig;
 
-    @Value("${spring.mail.username:}")
-    private String fromAddress;
-
-    @Value("${app.email.log-code-on-send-failure:false}")
-    private boolean logOnSendFailure;
-
-    public TenantInviteMailer(JavaMailSender mailSender, AppUrlConfig appUrlConfig) {
-        this.mailSender = Objects.requireNonNull(mailSender, "mailSender");
+    public TenantInviteMailer(PlatformEmailService emailService, AppUrlConfig appUrlConfig) {
+        this.emailService = Objects.requireNonNull(emailService, "emailService");
         this.appUrlConfig = Objects.requireNonNull(appUrlConfig, "appUrlConfig");
     }
 
-    public void sendInviteEmail(String toEmail, String inviteToken) {
-        String acceptUrl = appUrlConfig.getPortalUrl()
-            + "/accept-invite?email="
-            + URLEncoder.encode(toEmail, StandardCharsets.UTF_8)
-            + "&token="
-            + URLEncoder.encode(inviteToken, StandardCharsets.UTF_8);
+    /**
+     * Sends a temporary password and login instructions for a new team member.
+     *
+     * @return true when SMTP accepted the message; false when email was skipped or only logged
+     */
+    public boolean sendTempPasswordInviteEmail(String toEmail, String temporaryPassword) {
+        String loginUrl = appUrlConfig.getPortalUrl() + "/login";
+        String body = """
+You have been invited to join your organisation on LoyaltyOS.
 
-        if (fromAddress == null || fromAddress.isBlank()) {
-            log.warn("spring.mail.username not set; skipping invite email. Accept URL: {}", acceptUrl);
-            return;
-        }
+Sign in with your email address and this temporary password:
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(toEmail);
-        message.setFrom(fromAddress);
-        message.setSubject("You have been invited to LoyaltyOS");
-        message.setText("""
+Email: %s
+Temporary password: %s
+
+Sign in here: %s
+
+You will be asked to choose a new password immediately after your first sign-in.
+
+If you were not expecting this invitation, you can ignore this email.
+""".formatted(toEmail, temporaryPassword, loginUrl);
+
+        return emailService.sendPlainText(
+            toEmail,
+            "Your LoyaltyOS team invite",
+            body,
+            "Login URL: " + loginUrl
+        );
+    }
+
+    /**
+     * Legacy accept-link invite (kept for backward compatibility with pending INVITED users).
+     *
+     * @return true when SMTP accepted the message; false when email was skipped or only logged
+     */
+    public boolean sendInviteEmail(String toEmail, String inviteToken) {
+        String acceptUrl = buildAcceptUrl(toEmail, inviteToken);
+        String body = """
 You have been invited to join your organisation on LoyaltyOS.
 
 Open the link below to set your password and activate your account:
@@ -57,18 +65,21 @@ Open the link below to set your password and activate your account:
 This link expires in 7 days.
 
 If you were not expecting this invitation, you can ignore this email.
-""".formatted(acceptUrl));
+""".formatted(acceptUrl);
 
-        try {
-            mailSender.send(message);
-            log.info("Team invite email sent to {}", toEmail);
-        } catch (MailException ex) {
-            log.error("Failed to send team invite email to {}.", toEmail, ex);
-            if (logOnSendFailure) {
-                log.warn("Invite accept URL for {}: {}", toEmail, acceptUrl);
-                return;
-            }
-            throw ex;
-        }
+        return emailService.sendPlainText(
+            toEmail,
+            "You have been invited to LoyaltyOS",
+            body,
+            "Invite accept URL: " + acceptUrl
+        );
+    }
+
+    public String buildAcceptUrl(String toEmail, String inviteToken) {
+        return appUrlConfig.getPortalUrl()
+            + "/accept-invite?email="
+            + URLEncoder.encode(toEmail, StandardCharsets.UTF_8)
+            + "&token="
+            + URLEncoder.encode(inviteToken, StandardCharsets.UTF_8);
     }
 }

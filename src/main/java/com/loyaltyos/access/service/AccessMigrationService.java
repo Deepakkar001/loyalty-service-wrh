@@ -2,6 +2,7 @@ package com.loyaltyos.access.service;
 
 import com.loyaltyos.access.config.AccessProperties;
 import com.loyaltyos.access.enums.EntitlementSource;
+import com.loyaltyos.access.repository.AccessNavItemRepository;
 import com.loyaltyos.access.repository.TenantUserRepository;
 import com.loyaltyos.onboarding.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.enums.ContactRole;
@@ -26,19 +27,22 @@ public class AccessMigrationService implements ApplicationRunner {
     private final TenantContactRepository contactRepository;
     private final TenantUserRepository userRepository;
     private final AccessProvisioningService provisioningService;
+    private final AccessNavItemRepository navItemRepository;
 
     public AccessMigrationService(
         AccessProperties accessProperties,
         TenantOnboardingRepository tenantRepository,
         TenantContactRepository contactRepository,
         TenantUserRepository userRepository,
-        AccessProvisioningService provisioningService
+        AccessProvisioningService provisioningService,
+        AccessNavItemRepository navItemRepository
     ) {
         this.accessProperties = accessProperties;
         this.tenantRepository = tenantRepository;
         this.contactRepository = contactRepository;
         this.userRepository = userRepository;
         this.provisioningService = provisioningService;
+        this.navItemRepository = navItemRepository;
     }
 
     @Override
@@ -46,7 +50,21 @@ public class AccessMigrationService implements ApplicationRunner {
         if (!accessProperties.getMigration().isRunOnStartup()) {
             return;
         }
+        patchNavCatalog();
         tenantRepository.findAll().forEach(this::migrateTenantSafe);
+    }
+
+    @Transactional
+    protected void patchNavCatalog() {
+        navItemRepository.findAllByOrderBySortOrderAsc().stream()
+            .filter(item -> "/dashboard/loyalty-rules/my-rules".equals(item.getRoutePath()))
+            .forEach(item -> {
+                if (item.isRequiresOnboardingComplete()) {
+                    item.setRequiresOnboardingComplete(false);
+                    navItemRepository.save(item);
+                    log.info("Updated My Rules nav item to be available during setup progress");
+                }
+            });
     }
 
     private void migrateTenantSafe(TenantOnboarding tenant) {

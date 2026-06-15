@@ -11,35 +11,12 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 @EnableMethodSecurity
 public class MethodSecurityConfig {
 
-    private final AccessPermissionEvaluator permissionEvaluator;
-
-    public MethodSecurityConfig(AccessPermissionEvaluator permissionEvaluator) {
-        this.permissionEvaluator = permissionEvaluator;
-    }
-
     @Bean
-    public MethodSecurityExpressionHandler methodSecurityExpressionHandler() {
+    static MethodSecurityExpressionHandler methodSecurityExpressionHandler(
+        AccessPermissionEvaluator permissionEvaluator
+    ) {
         DefaultMethodSecurityExpressionHandler handler = new DefaultMethodSecurityExpressionHandler();
-        handler.setPermissionEvaluator(new org.springframework.security.access.PermissionEvaluator() {
-            @Override
-            public boolean hasPermission(
-                org.springframework.security.core.Authentication authentication,
-                Object targetDomainObject,
-                Object permission
-            ) {
-                return permissionEvaluator.hasPermission(authentication, String.valueOf(permission));
-            }
-
-            @Override
-            public boolean hasPermission(
-                org.springframework.security.core.Authentication authentication,
-                java.io.Serializable targetId,
-                String targetType,
-                Object permission
-            ) {
-                return permissionEvaluator.hasPermission(authentication, String.valueOf(permission));
-            }
-        });
+        handler.setPermissionEvaluator(permissionEvaluator);
         return handler;
     }
 }

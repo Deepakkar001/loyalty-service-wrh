@@ -185,7 +185,7 @@ public class AccessCatalogSeeder implements ApplicationRunner {
         items.add(new NavSeed("coupons", "/dashboard/coupons", "Coupons", 60, "coupons.view", true, "TicketPercent"));
         items.add(new NavSeed("coupons", "/dashboard/coupons/analytics", "Coupon Analytics", 61, "coupons.view", true, "BarChart3"));
         items.add(new NavSeed("loyalty_rules", "/dashboard/loyalty-rules/create/basic-info", "Create Rule", 70, "loyalty_rules.view", false, "GitBranchPlus"));
-        items.add(new NavSeed("loyalty_rules", "/dashboard/loyalty-rules/my-rules", "My Rules", 71, "loyalty_rules.view", true, "Search"));
+        items.add(new NavSeed("loyalty_rules", "/dashboard/loyalty-rules/my-rules", "My Rules", 71, "loyalty_rules.view", false, "Search"));
         items.add(new NavSeed("campaigns", "/dashboard/campaigns", "Campaigns", 80, "campaigns.view", true, "Megaphone"));
         items.add(new NavSeed("campaigns", "/dashboard/campaigns/create", "Create Campaign", 81, "campaigns.create", true, "GitBranchPlus"));
         items.add(new NavSeed("campaigns", "/dashboard/campaign-rules/create/campaign?new=1", "Create Campaign Rule", 82, "campaigns.create", true, "GitBranchPlus"));

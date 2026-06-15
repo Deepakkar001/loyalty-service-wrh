@@ -49,7 +49,7 @@ public class CampaignTargetCustomerController {
     }
 
     @PostMapping("/{campaignUid}/target-customers/upload")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<CampaignTargetUploadResponse> upload(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,
@@ -85,7 +85,7 @@ public class CampaignTargetCustomerController {
     }
 
     @DeleteMapping("/{campaignUid}/target-customers/{customerId}")
-    @PreAuthorize("hasPermission('campaigns.edit')")
+    @PreAuthorize("hasPermission(null, 'campaigns.edit')")
     public ResponseEntity<Void> remove(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable("campaignUid") String campaignUid,

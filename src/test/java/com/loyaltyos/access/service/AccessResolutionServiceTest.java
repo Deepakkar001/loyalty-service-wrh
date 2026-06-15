@@ -85,7 +85,40 @@ class AccessResolutionServiceTest {
     }
 
     @Test
-    void legacyPrimaryAdminGetsAllCandidatePermissionsWhenNoGrants() {
+    void hasPermission_returnsFalseWhenNoEntitledModules() {
+        String tenantId = "t1";
+        String userId = "u1";
+        when(entitlementRepository.findByTenantIdAndEnabledTrue(tenantId)).thenReturn(List.of());
+
+        assertFalse(service.hasPermission(tenantId, userId, "loyalty_rules.create"));
+    }
+
+    @Test
+    void primaryAdminWithPartialGrantsGetsAllCandidatePermissions() {
+        String tenantId = "t1";
+        String userId = "u1";
+        String roleId = "r1";
+        Set<String> candidates = Set.of("campaigns.view", "loyalty_rules.create");
+
+        when(userRoleRepository.findByUserId(userId)).thenReturn(List.of(new TenantUserRole(userId, roleId, tenantId)));
+        PrivilegeGrant partial = new PrivilegeGrant();
+        partial.setPermissionKey("campaigns.view");
+        partial.setEffect(GrantEffect.GRANT);
+        when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectIdIn(
+            eq(tenantId), eq(GrantSubjectType.ROLE), eq(List.of(roleId))))
+            .thenReturn(List.of(partial));
+        when(grantRepository.findByTenantIdAndSubjectTypeAndSubjectId(any(), any(), any())).thenReturn(List.of());
+        TenantRole systemRole = new TenantRole();
+        systemRole.setRoleId(roleId);
+        systemRole.setSystem(true);
+        when(roleRepository.findByTenantIdAndSystemTrue(tenantId)).thenReturn(Optional.of(systemRole));
+
+        Set<String> effective = service.resolveEffectivePermissions(tenantId, userId, candidates);
+        assertTrue(effective.containsAll(candidates));
+    }
+
+    @Test
+    void userWithNoRoleAssignmentsGetsNoPermissions() {
         String tenantId = "t1";
         String userId = "u1";
         Set<String> candidates = Set.of("campaigns.view", "integrations.view");
@@ -98,7 +131,7 @@ class AccessResolutionServiceTest {
         when(roleRepository.findByTenantIdAndSystemTrue(tenantId)).thenReturn(Optional.of(systemRole));
 
         Set<String> effective = service.resolveEffectivePermissions(tenantId, userId, candidates);
-        assertTrue(effective.containsAll(candidates));
+        assertTrue(effective.isEmpty());
     }
 
     private static PrivilegeGrant deny(String key) {

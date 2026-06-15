@@ -3,7 +3,7 @@ package com.loyaltyos.access.security;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.loyaltyos.access.config.AccessProperties;
 import com.loyaltyos.onboarding.security.TenantJwt;
 
 import jakarta.servlet.FilterChain;
@@ -41,17 +41,17 @@ public class TenantModuleAccessFilter extends OncePerRequestFilter {
 
 
     private final ModuleEntitlementGuard moduleEntitlementGuard;
-
+    private final AccessProperties accessProperties;
     private final ObjectMapper objectMapper;
 
-
-
-    public TenantModuleAccessFilter(ModuleEntitlementGuard moduleEntitlementGuard, ObjectMapper objectMapper) {
-
+    public TenantModuleAccessFilter(
+        ModuleEntitlementGuard moduleEntitlementGuard,
+        AccessProperties accessProperties,
+        ObjectMapper objectMapper
+    ) {
         this.moduleEntitlementGuard = moduleEntitlementGuard;
-
+        this.accessProperties = accessProperties;
         this.objectMapper = objectMapper;
-
     }
 
 
@@ -140,21 +140,20 @@ public class TenantModuleAccessFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
+        if (!accessProperties.getPermissions().isEnforce()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         var moduleKey = TenantModuleApiResolver.resolveModuleKey(path);
 
         if (moduleKey.isEmpty()) {
-
             filterChain.doFilter(request, response);
-
             return;
-
         }
 
-
-
         try {
-
-            moduleEntitlementGuard.requireModule(tenantId, moduleKey.get());
+            moduleEntitlementGuard.requireModuleAccess(jwt, moduleKey.get(), request.getMethod(), path);
 
             filterChain.doFilter(request, response);
 
@@ -171,6 +170,22 @@ public class TenantModuleAccessFilter extends OncePerRequestFilter {
                 "message", ex.getMessage(),
 
                 "moduleKey", ex.getModuleKey()
+
+            ));
+
+        } catch (com.loyaltyos.access.exception.PermissionDeniedException ex) {
+
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+            objectMapper.writeValue(response.getOutputStream(), Map.of(
+
+                "code", "PERMISSION_DENIED",
+
+                "message", ex.getMessage(),
+
+                "permissionKey", ex.getPermissionKey()
 
             ));
 

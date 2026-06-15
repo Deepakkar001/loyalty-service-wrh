@@ -62,7 +62,7 @@ public class MerchantAdminController {
     }
 
     @PostMapping
-    @PreAuthorize("hasPermission('merchants.create')")
+    @PreAuthorize("hasPermission(null, 'merchants.create')")
     public ResponseEntity<MerchantResponse> create(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody CreateMerchantRequest request
@@ -111,7 +111,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/agreement")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantResponse> submitAgreement(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -123,7 +123,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/config")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantResponse> configure(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -135,7 +135,7 @@ public class MerchantAdminController {
     }
 
     @PostMapping("/{merchantUid}/integration")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantResponse> completeIntegration(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -156,7 +156,7 @@ public class MerchantAdminController {
     }
 
     @PostMapping("/{merchantUid}/api-keys")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantApiKeyResponse> createApiKey(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -170,7 +170,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/api-keys/{keyUid}/revoke")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<Void> revokeApiKey(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -182,7 +182,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/activate")
-    @PreAuthorize("hasPermission('merchants.approve')")
+    @PreAuthorize("hasPermission(null, 'merchants.approve')")
     public ResponseEntity<MerchantActivateResponse> activate(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid
@@ -193,7 +193,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/suspend")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantResponse> suspend(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid,
@@ -206,7 +206,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/{merchantUid}/unsuspend")
-    @PreAuthorize("hasPermission('merchants.edit')")
+    @PreAuthorize("hasPermission(null, 'merchants.edit')")
     public ResponseEntity<MerchantResponse> unsuspend(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String merchantUid
@@ -223,7 +223,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/pending-campaign-approvals/{campaignUid}/approve")
-    @PreAuthorize("hasPermission('merchants.approve')")
+    @PreAuthorize("hasPermission(null, 'merchants.approve')")
     public ResponseEntity<CampaignResponse> approveCampaign(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String campaignUid
@@ -234,7 +234,7 @@ public class MerchantAdminController {
     }
 
     @PutMapping("/pending-campaign-approvals/{campaignUid}/reject")
-    @PreAuthorize("hasPermission('merchants.approve')")
+    @PreAuthorize("hasPermission(null, 'merchants.approve')")
     public ResponseEntity<CampaignResponse> rejectCampaign(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String campaignUid

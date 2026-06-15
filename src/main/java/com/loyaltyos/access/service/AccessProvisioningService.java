@@ -15,6 +15,7 @@ import com.loyaltyos.access.repository.PrivilegeGrantRepository;
 import com.loyaltyos.access.repository.TenantModuleEntitlementRepository;
 import com.loyaltyos.access.repository.TenantRoleRepository;
 import com.loyaltyos.access.repository.TenantUserRepository;
+import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import com.loyaltyos.access.repository.TenantUserRoleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class AccessProvisioningService {
     public static final String PRIMARY_ADMIN_ROLE_NAME = "Primary Administrator";
 
     private final TenantUserRepository userRepository;
+    private final TenantOnboardingRepository tenantOnboardingRepository;
     private final TenantRoleRepository roleRepository;
     private final TenantUserRoleRepository userRoleRepository;
     private final TenantModuleEntitlementRepository entitlementRepository;
@@ -38,6 +40,7 @@ public class AccessProvisioningService {
 
     public AccessProvisioningService(
         TenantUserRepository userRepository,
+        TenantOnboardingRepository tenantOnboardingRepository,
         TenantRoleRepository roleRepository,
         TenantUserRoleRepository userRoleRepository,
         TenantModuleEntitlementRepository entitlementRepository,
@@ -46,6 +49,7 @@ public class AccessProvisioningService {
         AccessModuleActionRepository moduleActionRepository
     ) {
         this.userRepository = userRepository;
+        this.tenantOnboardingRepository = tenantOnboardingRepository;
         this.roleRepository = roleRepository;
         this.userRoleRepository = userRoleRepository;
         this.entitlementRepository = entitlementRepository;
@@ -65,6 +69,7 @@ public class AccessProvisioningService {
                 user.setPasswordHash(passwordHash);
                 userRepository.save(user);
             }
+            ensurePrimaryAdminAccess(tenantId, user.getUserId());
             return user;
         }
 
@@ -79,9 +84,50 @@ public class AccessProvisioningService {
         user.setSessionVersion(1);
         userRepository.save(user);
 
-        TenantRole role = provisionSystemRole(tenantId);
-        userRoleRepository.save(new TenantUserRole(userId, role.getRoleId(), tenantId));
+        ensurePrimaryAdminAccess(tenantId, userId);
         return user;
+    }
+
+    @Transactional
+    public void repairPrimaryAdminAccess(String tenantId, String userId) {
+        ensurePrimaryAdminAccess(tenantId, userId);
+        syncPrimaryAdminGrants(tenantId);
+    }
+
+    /**
+     * Ensures tenant-owner accounts keep Primary Administrator access and removes that system role
+     * from invited team users if it was incorrectly assigned.
+     */
+    @Transactional
+    public void prepareUserAccessContext(String tenantId, String userId, String userEmail) {
+        String tenantOwnerEmail = tenantOnboardingRepository.findByTenantId(tenantId)
+            .map(t -> t.getEmail())
+            .map(e -> e.toLowerCase().trim())
+            .orElse(null);
+        String normalizedUserEmail = userEmail != null ? userEmail.toLowerCase().trim() : null;
+
+        if (tenantOwnerEmail != null && tenantOwnerEmail.equals(normalizedUserEmail)) {
+            repairPrimaryAdminAccess(tenantId, userId);
+            return;
+        }
+
+        roleRepository.findByTenantIdAndSystemTrue(tenantId).ifPresent(systemRole ->
+            userRoleRepository.findByUserId(userId).stream()
+                .filter(ur -> systemRole.getRoleId().equals(ur.getRoleId()))
+                .forEach(userRoleRepository::delete)
+        );
+    }
+
+    private void ensurePrimaryAdminAccess(String tenantId, String userId) {
+        TenantRole role = provisionSystemRole(tenantId);
+        boolean hasRole = userRoleRepository.findByUserId(userId).stream()
+            .anyMatch(ur -> role.getRoleId().equals(ur.getRoleId()));
+        if (!hasRole) {
+            userRoleRepository.save(new TenantUserRole(userId, role.getRoleId(), tenantId));
+        }
+        if (hasEntitlements(tenantId)) {
+            grantAllEntitledPermissions(tenantId, role.getRoleId());
+        }
     }
 
     @Transactional

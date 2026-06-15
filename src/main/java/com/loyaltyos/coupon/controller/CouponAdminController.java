@@ -43,7 +43,7 @@ public class CouponAdminController {
     }
 
     @PostMapping
-    @PreAuthorize("hasPermission('coupons.create')")
+    @PreAuthorize("hasPermission(null, 'coupons.create')")
     public ResponseEntity<CouponResponse> create(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody CouponCreateRequest request
@@ -79,7 +79,7 @@ public class CouponAdminController {
     }
 
     @PutMapping("/{couponUid}")
-    @PreAuthorize("hasPermission('coupons.edit')")
+    @PreAuthorize("hasPermission(null, 'coupons.edit')")
     public ResponseEntity<CouponResponse> update(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String couponUid,
@@ -95,7 +95,7 @@ public class CouponAdminController {
     }
 
     @PostMapping("/{couponUid}/activate")
-    @PreAuthorize("hasPermission('coupons.edit')")
+    @PreAuthorize("hasPermission(null, 'coupons.edit')")
     public ResponseEntity<CouponResponse> activate(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String couponUid
@@ -110,7 +110,7 @@ public class CouponAdminController {
     }
 
     @PostMapping("/{couponUid}/revoke")
-    @PreAuthorize("hasPermission('coupons.edit')")
+    @PreAuthorize("hasPermission(null, 'coupons.edit')")
     public ResponseEntity<CouponResponse> revoke(
         @AuthenticationPrincipal Jwt jwt,
         @PathVariable String couponUid

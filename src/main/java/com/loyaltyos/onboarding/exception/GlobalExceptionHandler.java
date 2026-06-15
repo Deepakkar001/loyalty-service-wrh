@@ -19,6 +19,8 @@ import com.loyaltyos.merchants.exception.MerchantAccessDeniedException;
 import com.loyaltyos.merchants.exception.MerchantNotActiveException;
 import com.loyaltyos.merchants.exception.MerchantNotFoundException;
 import com.loyaltyos.voucher.exception.VoucherCatalogException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -55,6 +57,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleModuleNotEntitled(
             ModuleNotEntitledException ex, WebRequest request) {
         return buildResponse(HttpStatus.FORBIDDEN, "MODULE_NOT_ENTITLED", ex.getMessage(), request);
+    }
+
+    @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            RuntimeException ex, WebRequest request) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            message = "You do not have permission to perform this action.";
+        }
+        return buildResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", message, request);
     }
 
     @ExceptionHandler(DuplicateTenantException.class)
@@ -220,6 +232,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(
             IllegalArgumentException ex, WebRequest request) {
         String msg = ex.getMessage();
+        if (msg != null && msg.startsWith("Failed to evaluate expression")) {
+            String detail = resolveSecurityExpressionFailure(ex);
+            return buildResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", detail, request);
+        }
         boolean looksLikeNotFound = msg != null
                 && (msg.toLowerCase().startsWith("unknown ")
                         || msg.toLowerCase().contains(" not found"));
@@ -227,6 +243,19 @@ public class GlobalExceptionHandler {
             return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", msg, request);
         }
         return buildResponse(HttpStatus.BAD_REQUEST, "BAD_REQUEST", msg, request);
+    }
+
+    private static String resolveSecurityExpressionFailure(IllegalArgumentException ex) {
+        Throwable cause = ex.getCause();
+        while (cause != null) {
+            String causeMsg = cause.getMessage();
+            if (causeMsg != null && !causeMsg.isBlank()
+                && !causeMsg.startsWith("Failed to evaluate expression")) {
+                return causeMsg;
+            }
+            cause = cause.getCause();
+        }
+        return "You do not have permission to perform this action.";
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

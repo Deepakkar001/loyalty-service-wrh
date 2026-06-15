@@ -13,6 +13,7 @@ public class LoginResponse {
     private String fullName;
     private OnboardingStatus onboardingStatus;
     private AgreementStatus latestAgreementStatus;
+    private boolean mustChangePassword;
 
     public LoginResponse() {}
 
@@ -24,7 +25,8 @@ public class LoginResponse {
         String email,
         String fullName,
         OnboardingStatus onboardingStatus,
-        AgreementStatus latestAgreementStatus
+        AgreementStatus latestAgreementStatus,
+        boolean mustChangePassword
     ) {
         this.accessToken = accessToken;
         this.tokenType = tokenType;
@@ -34,6 +36,7 @@ public class LoginResponse {
         this.fullName = fullName;
         this.onboardingStatus = onboardingStatus;
         this.latestAgreementStatus = latestAgreementStatus;
+        this.mustChangePassword = mustChangePassword;
     }
 
     public static Builder builder() { return new Builder(); }
@@ -47,6 +50,7 @@ public class LoginResponse {
         private String fullName;
         private OnboardingStatus onboardingStatus;
         private AgreementStatus latestAgreementStatus;
+        private boolean mustChangePassword;
 
         private Builder() {}
 
@@ -58,6 +62,7 @@ public class LoginResponse {
         public Builder fullName(String fullName) { this.fullName = fullName; return this; }
         public Builder onboardingStatus(OnboardingStatus onboardingStatus) { this.onboardingStatus = onboardingStatus; return this; }
         public Builder latestAgreementStatus(AgreementStatus latestAgreementStatus) { this.latestAgreementStatus = latestAgreementStatus; return this; }
+        public Builder mustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; return this; }
 
         public LoginResponse build() {
             return new LoginResponse(
@@ -68,7 +73,8 @@ public class LoginResponse {
                 email,
                 fullName,
                 onboardingStatus,
-                latestAgreementStatus
+                latestAgreementStatus,
+                mustChangePassword
             );
         }
     }
@@ -81,5 +87,6 @@ public class LoginResponse {
     public String getFullName() { return fullName; }
     public OnboardingStatus getOnboardingStatus() { return onboardingStatus; }
     public AgreementStatus getLatestAgreementStatus() { return latestAgreementStatus; }
+    public boolean isMustChangePassword() { return mustChangePassword; }
 }
 

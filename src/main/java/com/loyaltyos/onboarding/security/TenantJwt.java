@@ -50,6 +50,17 @@ public final class TenantJwt {
         return v == null ? null : Integer.parseInt(v.toString());
     }
 
+    public static boolean mustChangePassword(Jwt jwt) {
+        if (jwt == null) {
+            return false;
+        }
+        Object v = jwt.getClaims().get("mustChangePassword");
+        if (v instanceof Boolean b) {
+            return b;
+        }
+        return v != null && Boolean.parseBoolean(v.toString());
+    }
+
     /** Returns "admin" or "tenant" (defaults to "tenant" if absent). */
     public static String type(Jwt jwt) {
         if (jwt == null) {

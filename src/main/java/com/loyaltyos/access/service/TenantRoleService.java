@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.loyaltyos.access.dto.CreateRoleRequest;
 import com.loyaltyos.access.dto.RoleResponse;
 import com.loyaltyos.access.dto.RoleTemplateResponse;
+import com.loyaltyos.access.dto.UpdateRoleRequest;
 import com.loyaltyos.access.entity.PrivilegeGrant;
 import com.loyaltyos.access.entity.TenantRole;
 import com.loyaltyos.access.entity.TenantRoleTemplate;
@@ -13,6 +14,7 @@ import com.loyaltyos.access.enums.GrantSubjectType;
 import com.loyaltyos.access.repository.PrivilegeGrantRepository;
 import com.loyaltyos.access.repository.TenantRoleRepository;
 import com.loyaltyos.access.repository.TenantRoleTemplateRepository;
+import com.loyaltyos.access.repository.TenantUserRoleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ public class TenantRoleService {
     private final TenantRoleRepository roleRepository;
     private final TenantRoleTemplateRepository templateRepository;
     private final PrivilegeGrantRepository grantRepository;
+    private final TenantUserRoleRepository userRoleRepository;
     private final ObjectMapper objectMapper;
     private final AccessControlAuditService auditService;
 
@@ -33,12 +36,14 @@ public class TenantRoleService {
         TenantRoleRepository roleRepository,
         TenantRoleTemplateRepository templateRepository,
         PrivilegeGrantRepository grantRepository,
+        TenantUserRoleRepository userRoleRepository,
         ObjectMapper objectMapper,
         AccessControlAuditService auditService
     ) {
         this.roleRepository = roleRepository;
         this.templateRepository = templateRepository;
         this.grantRepository = grantRepository;
+        this.userRoleRepository = userRoleRepository;
         this.objectMapper = objectMapper;
         this.auditService = auditService;
     }
@@ -95,12 +100,43 @@ public class TenantRoleService {
     }
 
     @Transactional
+    public RoleResponse updateRole(String tenantId, String roleId, UpdateRoleRequest request) {
+        TenantRole role = roleRepository.findById(roleId)
+            .filter(r -> tenantId.equals(r.getTenantId()))
+            .orElseThrow(() -> new IllegalArgumentException("Role not found"));
+        if (role.isSystem()) {
+            throw new IllegalArgumentException("Cannot edit system role");
+        }
+
+        String roleName = request.getRoleName().trim();
+        if (roleName.isBlank()) {
+            throw new IllegalArgumentException("Role name is required");
+        }
+        if (!roleName.equalsIgnoreCase(role.getRoleName())
+            && roleRepository.existsByTenantIdAndRoleName(tenantId, roleName)) {
+            throw new IllegalArgumentException("Role name already exists");
+        }
+
+        role.setRoleName(roleName);
+        String description = request.getDescription();
+        role.setDescription(description != null && !description.isBlank() ? description.trim() : null);
+        roleRepository.save(role);
+
+        auditService.logFromSecurityContext(tenantId, "ROLE_UPDATED",
+            Map.of("roleId", roleId, "roleName", role.getRoleName()));
+        return toResponse(role);
+    }
+
+    @Transactional
     public void deleteRole(String tenantId, String roleId) {
         TenantRole role = roleRepository.findById(roleId)
             .filter(r -> tenantId.equals(r.getTenantId()))
             .orElseThrow(() -> new IllegalArgumentException("Role not found"));
         if (role.isSystem()) {
             throw new IllegalArgumentException("Cannot delete system role");
+        }
+        if (!userRoleRepository.findByRoleId(roleId).isEmpty()) {
+            throw new IllegalStateException("Cannot delete a role that is assigned to users. Reassign users first.");
         }
         grantRepository.deleteByTenantIdAndSubjectTypeAndSubjectId(tenantId, GrantSubjectType.ROLE, roleId);
         roleRepository.delete(role);

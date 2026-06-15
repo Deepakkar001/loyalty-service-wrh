@@ -39,7 +39,7 @@ public class VoucherDenominationController {
     }
 
     @PutMapping
-    @PreAuthorize("hasPermission('voucher_programs.edit')")
+    @PreAuthorize("hasPermission(null, 'voucher_programs.edit')")
     public ResponseEntity<DenominationMappingsResponse> replaceMappings(
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody ReplaceDenominationMappingsRequest request,

@@ -4,10 +4,12 @@ import com.loyaltyos.access.config.AccessProperties;
 import com.loyaltyos.access.dto.MeAccessResponse;
 import com.loyaltyos.access.dto.NavGroupDto;
 import com.loyaltyos.access.dto.NavItemDto;
+import com.loyaltyos.access.dto.RouteGuardDto;
 import com.loyaltyos.access.entity.AccessModule;
 import com.loyaltyos.access.entity.AccessNavItem;
 import com.loyaltyos.access.entity.PrivilegeGrant;
 import com.loyaltyos.access.entity.TenantModuleEntitlement;
+import com.loyaltyos.access.entity.TenantRole;
 import com.loyaltyos.access.entity.TenantUser;
 import com.loyaltyos.access.enums.GrantEffect;
 import com.loyaltyos.access.enums.GrantSubjectType;
@@ -72,13 +74,8 @@ public class AccessResolutionService {
             .filter(u -> tenantId.equals(u.getTenantId()))
             .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
-        Set<String> entitledModules = entitlementRepository.findByTenantIdAndEnabledTrue(tenantId).stream()
-            .map(TenantModuleEntitlement::getModuleKey)
-            .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        Set<String> candidatePermissions = moduleActionRepository.findByModuleKeyIn(entitledModules).stream()
-            .map(ma -> ma.getPermissionKey())
-            .collect(Collectors.toSet());
+        Set<String> entitledModules = entitledModuleKeys(tenantId);
+        Set<String> candidatePermissions = permissionsForModules(entitledModules);
 
         Set<String> effective = resolveEffectivePermissions(tenantId, tenantUserId, candidatePermissions);
 
@@ -89,6 +86,7 @@ public class AccessResolutionService {
         response.setPermissions(new ArrayList<>(effective));
         response.setEntitledModules(new ArrayList<>(entitledModules));
         response.setNavGroups(buildNavGroups(entitledModules, effective));
+        response.setRouteGuards(buildRouteGuards(entitledModules));
         response.setModulesConfigured(entitlementRepository.countByTenantId(tenantId) > 0);
         response.setDynamicNavEnabled(accessProperties.getDynamicNav().isEnabled());
         return response;
@@ -124,7 +122,11 @@ public class AccessResolutionService {
         effective.addAll(userGrants);
         effective.removeAll(userDenies);
 
-        if (effective.isEmpty() && roleRepository.findByTenantIdAndSystemTrue(tenantId).isPresent()) {
+        String systemRoleId = roleRepository.findByTenantIdAndSystemTrue(tenantId)
+            .map(TenantRole::getRoleId)
+            .orElse(null);
+        if (systemRoleId != null && roleIds.contains(systemRoleId)) {
+            // Primary Administrator always receives every permission for entitled modules.
             effective.addAll(candidatePermissions);
         }
 
@@ -133,13 +135,23 @@ public class AccessResolutionService {
     }
 
     public boolean hasPermission(String tenantId, String tenantUserId, String permissionKey) {
-        Set<String> entitledModules = entitlementRepository.findByTenantIdAndEnabledTrue(tenantId).stream()
+        Set<String> candidates = permissionsForModules(entitledModuleKeys(tenantId));
+        return resolveEffectivePermissions(tenantId, tenantUserId, candidates).contains(permissionKey);
+    }
+
+    private Set<String> entitledModuleKeys(String tenantId) {
+        return entitlementRepository.findByTenantIdAndEnabledTrue(tenantId).stream()
             .map(TenantModuleEntitlement::getModuleKey)
-            .collect(Collectors.toSet());
-        Set<String> candidates = moduleActionRepository.findByModuleKeyIn(entitledModules).stream()
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Set<String> permissionsForModules(Set<String> moduleKeys) {
+        if (moduleKeys == null || moduleKeys.isEmpty()) {
+            return Set.of();
+        }
+        return moduleActionRepository.findByModuleKeyIn(moduleKeys).stream()
             .map(ma -> ma.getPermissionKey())
             .collect(Collectors.toSet());
-        return resolveEffectivePermissions(tenantId, tenantUserId, candidates).contains(permissionKey);
     }
 
     public boolean isModuleEntitled(String tenantId, String moduleKey) {
@@ -148,6 +160,9 @@ public class AccessResolutionService {
     }
 
     private List<NavGroupDto> buildNavGroups(Set<String> entitledModules, Set<String> permissions) {
+        if (entitledModules == null || entitledModules.isEmpty()) {
+            return List.of();
+        }
         List<AccessNavItem> navItems = navItemRepository.findByModuleKeyInOrderBySortOrderAsc(entitledModules);
         Map<String, AccessModule> modulesByKey = moduleRepository.findByActiveTrueOrderBySortOrderAsc().stream()
             .collect(Collectors.toMap(AccessModule::getModuleKey, m -> m, (a, b) -> a, LinkedHashMap::new));
@@ -171,5 +186,36 @@ public class AccessResolutionService {
         return grouped.entrySet().stream()
             .map(e -> new NavGroupDto(e.getKey(), e.getValue()))
             .toList();
+    }
+
+    private List<RouteGuardDto> buildRouteGuards(Set<String> entitledModules) {
+        List<RouteGuardDto> guards = new ArrayList<>();
+        if (entitledModules != null && !entitledModules.isEmpty()) {
+            guards.addAll(navItemRepository.findByModuleKeyInOrderBySortOrderAsc(entitledModules).stream()
+                .map(item -> new RouteGuardDto(stripRouteQuery(item.getRoutePath()), item.getRequiredPermissionKey()))
+                .toList());
+        }
+        appendSupplementalRouteGuards(guards, entitledModules);
+        return guards;
+    }
+
+    private void appendSupplementalRouteGuards(List<RouteGuardDto> guards, Set<String> entitledModules) {
+        if (entitledModules == null) {
+            return;
+        }
+        if (entitledModules.contains("campaigns")) {
+            guards.add(new RouteGuardDto("/dashboard/campaign-rules/create", "campaigns.create"));
+        }
+        if (entitledModules.contains("loyalty_rules")) {
+            guards.add(new RouteGuardDto("/dashboard/loyalty-rules/create", "loyalty_rules.create"));
+        }
+    }
+
+    private static String stripRouteQuery(String routePath) {
+        if (routePath == null) {
+            return "";
+        }
+        int query = routePath.indexOf('?');
+        return query >= 0 ? routePath.substring(0, query) : routePath;
     }
 }

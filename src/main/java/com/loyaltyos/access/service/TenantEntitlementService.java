@@ -72,7 +72,7 @@ public class TenantEntitlementService {
             ModuleCatalogItemDto dto = new ModuleCatalogItemDto();
             dto.setModuleKey(m.getModuleKey());
             dto.setDisplayName(m.getDisplayName());
-            dto.setDescription(m.getDisplayName());
+            dto.setDescription(ModuleCatalogDescriptions.forModule(m.getModuleKey(), m.getDisplayName()));
             dto.setRequired(m.isRequired());
             dto.setInTierBaseline(tierBaseline.contains(m.getModuleKey()));
             dto.setLocked(m.isRequired() || tierLocked.contains(m.getModuleKey()));
@@ -127,7 +127,7 @@ public class TenantEntitlementService {
                     e.setModuleKey(module.getModuleKey());
                     return e;
                 });
-            boolean shouldEnable = module.isRequired() || enabled.contains(module.getModuleKey());
+            boolean shouldEnable = enabled.contains(module.getModuleKey());
             ent.setEnabled(shouldEnable);
             ent.setSource(EntitlementSource.PLATFORM_ADMIN);
             ent.setEnabledBy(adminUid);
@@ -151,16 +151,30 @@ public class TenantEntitlementService {
 
     @Transactional(readOnly = true)
     public List<ModuleCatalogItemDto> getTenantModules(String tenantId) {
-        Set<String> entitled = entitlementRepository.findByTenantIdAndEnabledTrue(tenantId).stream()
-            .map(TenantModuleEntitlement::getModuleKey)
-            .collect(Collectors.toSet());
+        TenantOnboarding tenant = tenantRepository.findByTenantId(tenantId)
+            .orElseThrow(() -> new IllegalArgumentException("Tenant not found"));
+        SubscriptionTier tier = tenant.getSubscriptionTier();
+
+        Set<String> tierBaseline = tierBaselineRepository.findBySubscriptionTier(tier).stream()
+            .map(b -> b.getModuleKey())
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Map<String, TenantModuleEntitlement> entitlements = entitlementRepository.findByTenantId(tenantId).stream()
+            .collect(Collectors.toMap(TenantModuleEntitlement::getModuleKey, e -> e, (a, b) -> a));
+
         return moduleRepository.findByActiveTrueOrderBySortOrderAsc().stream().map(m -> {
             ModuleCatalogItemDto dto = new ModuleCatalogItemDto();
             dto.setModuleKey(m.getModuleKey());
             dto.setDisplayName(m.getDisplayName());
+            dto.setDescription(ModuleCatalogDescriptions.forModule(m.getModuleKey(), m.getDisplayName()));
             dto.setRequired(m.isRequired());
-            dto.setEnabled(entitled.contains(m.getModuleKey()));
-            dto.setLocked(m.isRequired());
+            dto.setInTierBaseline(tierBaseline.contains(m.getModuleKey()));
+            dto.setLocked(false);
+            TenantModuleEntitlement ent = entitlements.get(m.getModuleKey());
+            dto.setEnabled(ent != null && ent.isEnabled());
+            if (ent != null && ent.getSource() != null) {
+                dto.setEntitlementSource(ent.getSource().name());
+            }
             return dto;
         }).toList();
     }

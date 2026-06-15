@@ -10,6 +10,7 @@ public class MeAccessResponse {
     private List<String> permissions;
     private List<String> entitledModules;
     private List<NavGroupDto> navGroups;
+    private List<RouteGuardDto> routeGuards;
     private boolean modulesConfigured;
     private boolean dynamicNavEnabled;
 
@@ -25,6 +26,8 @@ public class MeAccessResponse {
     public void setEntitledModules(List<String> entitledModules) { this.entitledModules = entitledModules; }
     public List<NavGroupDto> getNavGroups() { return navGroups; }
     public void setNavGroups(List<NavGroupDto> navGroups) { this.navGroups = navGroups; }
+    public List<RouteGuardDto> getRouteGuards() { return routeGuards; }
+    public void setRouteGuards(List<RouteGuardDto> routeGuards) { this.routeGuards = routeGuards; }
     public boolean isModulesConfigured() { return modulesConfigured; }
     public void setModulesConfigured(boolean modulesConfigured) { this.modulesConfigured = modulesConfigured; }
     public boolean isDynamicNavEnabled() { return dynamicNavEnabled; }

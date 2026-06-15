@@ -3,10 +3,14 @@ package com.loyaltyos.onboarding.service;
 import com.loyaltyos.access.entity.TenantUser;
 import com.loyaltyos.access.enums.TenantUserStatus;
 import com.loyaltyos.access.repository.TenantUserRepository;
+import com.loyaltyos.access.security.TenantPasswordPolicy;
 import com.loyaltyos.access.service.AccessProvisioningService;
 import com.loyaltyos.onboarding.dto.AcceptInviteRequest;
+import com.loyaltyos.onboarding.dto.ChangePasswordRequest;
 import com.loyaltyos.onboarding.dto.LoginRequest;
 import com.loyaltyos.onboarding.dto.LoginResponse;
+import com.loyaltyos.onboarding.security.TenantJwt;
+import org.springframework.security.core.Authentication;
 import com.loyaltyos.onboarding.exception.EmailNotVerifiedException;
 import com.loyaltyos.onboarding.exception.InvalidCredentialsException;
 import com.loyaltyos.onboarding.enums.ContactRole;
@@ -25,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class TenantAuthService {
@@ -70,6 +75,11 @@ public class TenantAuthService {
     public AuthResult login(LoginRequest request) {
         String email = request.getEmail().toLowerCase().trim();
 
+        Optional<TenantUser> existingUser = tenantUserRepository.findByEmailIgnoreCase(email);
+        if (existingUser.isPresent()) {
+            return loginAsTenantUser(existingUser.get(), request.getPassword());
+        }
+
         var tenant = tenantRepository.findByEmail(email)
             .orElseThrow(InvalidCredentialsException::new);
 
@@ -78,12 +88,33 @@ public class TenantAuthService {
         }
 
         TenantUser user = resolveOrProvisionUser(tenant.getTenantId(), email, tenant.getPasswordHash());
+        return completeLogin(tenant.getTenantId(), user, tenant.getEmail(), tenant.getPasswordHash(), request.getPassword());
+    }
 
-        boolean ok = passwordEncoder.matches(request.getPassword(), user.getPasswordHash());
-        if (!ok) {
-            ok = passwordEncoder.matches(request.getPassword(), tenant.getPasswordHash());
+    private AuthResult loginAsTenantUser(TenantUser user, String rawPassword) {
+        var tenant = tenantRepository.findByTenantId(user.getTenantId())
+            .orElseThrow(InvalidCredentialsException::new);
+
+        if (!Boolean.TRUE.equals(tenant.getEmailVerified())) {
+            throw new EmailNotVerifiedException();
+        }
+
+        String tenantPrimaryEmail = tenant.getEmail();
+        return completeLogin(tenant.getTenantId(), user, user.getEmail(), tenantPrimaryEmail.equalsIgnoreCase(user.getEmail()) ? tenant.getPasswordHash() : null, rawPassword);
+    }
+
+    private AuthResult completeLogin(
+        String tenantId,
+        TenantUser user,
+        String loginEmail,
+        String tenantPasswordHashFallback,
+        String rawPassword
+    ) {
+        boolean ok = passwordEncoder.matches(rawPassword, user.getPasswordHash());
+        if (!ok && tenantPasswordHashFallback != null) {
+            ok = passwordEncoder.matches(rawPassword, tenantPasswordHashFallback);
             if (ok) {
-                user.setPasswordHash(tenant.getPasswordHash());
+                user.setPasswordHash(tenantPasswordHashFallback);
                 tenantUserRepository.save(user);
             }
         }
@@ -96,27 +127,32 @@ public class TenantAuthService {
 
         user.setLastLoginAt(Instant.now());
         tenantUserRepository.save(user);
+        accessProvisioningService.syncPrimaryAdminGrants(tenantId);
 
-        var latestAgreementStatus = agreementRepository.findTopByTenantIdOrderByCreatedAtDesc(tenant.getTenantId())
+        var tenant = tenantRepository.findByTenantId(tenantId)
+            .orElseThrow(InvalidCredentialsException::new);
+
+        var latestAgreementStatus = agreementRepository.findTopByTenantIdOrderByCreatedAtDesc(tenantId)
             .map(a -> a.getStatus())
             .orElse(null);
 
-        String fullName = user.getFullName() != null ? user.getFullName() : resolveFullName(tenant.getTenantId());
+        String fullName = user.getFullName() != null ? user.getFullName() : resolveFullName(tenantId);
 
         LoginResponse access = issueAccessToken(
-            tenant.getTenantId(),
+            tenantId,
             user.getUserId(),
-            tenant.getEmail(),
+            loginEmail,
             fullName,
             "TENANT_ADMIN",
             user.getSessionVersion(),
             tenant.getOnboardingStatus(),
-            latestAgreementStatus
+            latestAgreementStatus,
+            user.isMustChangePassword()
         );
 
         String refresh = refreshTokenService.issue(
             new RefreshTokenService.RefreshPrincipal(
-                tenant.getTenantId(), tenant.getEmail(), "TENANT_ADMIN", user.getUserId())
+                tenantId, loginEmail, "TENANT_ADMIN", user.getUserId())
         );
 
         return new AuthResult(access, refresh);
@@ -142,22 +178,26 @@ public class TenantAuthService {
             .map(a -> a.getStatus())
             .orElse(null);
 
+        String loginEmail = user.getEmail() != null && !user.getEmail().isBlank()
+            ? user.getEmail()
+            : principal.email();
         String fullName = user.getFullName() != null ? user.getFullName() : resolveFullName(tenant.getTenantId());
 
         LoginResponse access = issueAccessToken(
             tenant.getTenantId(),
             user.getUserId(),
-            tenant.getEmail(),
+            loginEmail,
             fullName,
             principal.role(),
             user.getSessionVersion(),
             tenant.getOnboardingStatus(),
-            latestAgreementStatus
+            latestAgreementStatus,
+            user.isMustChangePassword()
         );
 
         String rotated = refreshTokenService.issue(
             new RefreshTokenService.RefreshPrincipal(
-                tenant.getTenantId(), tenant.getEmail(), principal.role(), user.getUserId())
+                tenant.getTenantId(), loginEmail, principal.role(), user.getUserId())
         );
 
         return new AuthResult(access, rotated);
@@ -165,6 +205,36 @@ public class TenantAuthService {
 
     public void logout(String refreshToken) {
         refreshTokenService.revoke(refreshToken);
+    }
+
+    @Transactional
+    public AuthResult changePassword(Authentication authentication, ChangePasswordRequest request) {
+        var jwt = TenantJwt.resolve(authentication);
+        if (jwt == null) {
+            throw new InvalidCredentialsException();
+        }
+        String tenantId = TenantJwt.requireTenantId(jwt);
+        String tenantUserId = TenantJwt.tenantUserId(jwt);
+        if (tenantUserId == null || tenantUserId.isBlank()) {
+            throw new InvalidCredentialsException("User session is invalid");
+        }
+
+        TenantUser user = tenantUserRepository.findById(tenantUserId)
+            .filter(u -> tenantId.equals(u.getTenantId()))
+            .orElseThrow(InvalidCredentialsException::new);
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Current password is incorrect");
+        }
+        TenantPasswordPolicy.validateNewPassword(
+            request.getNewPassword(), user.getEmail(), request.getCurrentPassword());
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setMustChangePassword(false);
+        user.setSessionVersion(user.getSessionVersion() + 1);
+        tenantUserRepository.save(user);
+
+        return completeLogin(tenantId, user, user.getEmail(), null, request.getNewPassword());
     }
 
     @Transactional
@@ -215,7 +285,8 @@ public class TenantAuthService {
         String role,
         int sessionVersion,
         com.loyaltyos.onboarding.enums.OnboardingStatus status,
-        com.loyaltyos.onboarding.enums.AgreementStatus latestAgreementStatus
+        com.loyaltyos.onboarding.enums.AgreementStatus latestAgreementStatus,
+        boolean mustChangePassword
     ) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(jwtProperties.getAccessTtlMinutes() * 60);
@@ -230,6 +301,7 @@ public class TenantAuthService {
             .claim("email", email)
             .claim("role", role)
             .claim("sessionVersion", sessionVersion)
+            .claim("mustChangePassword", mustChangePassword)
             .build();
 
         JwsHeader jwsHeader = JwsHeader.with(MacAlgorithm.HS256).build();
@@ -244,6 +316,7 @@ public class TenantAuthService {
             .fullName(fullName)
             .onboardingStatus(status)
             .latestAgreementStatus(latestAgreementStatus)
+            .mustChangePassword(mustChangePassword)
             .build();
     }
 }

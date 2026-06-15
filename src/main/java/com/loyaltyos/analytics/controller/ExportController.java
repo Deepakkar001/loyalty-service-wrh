@@ -29,9 +29,9 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @RequestMapping("/api/v1/analytics/export")
 @Tag(name = "Analytics Export", description = "Streaming CSV and JSON exports")
 @PreAuthorize(
-    "hasPermission('analytics_operational.export') "
-        + "or hasPermission('analytics_finance.export') "
-        + "or hasPermission('analytics_cohort.export')"
+    "hasPermission(null, 'analytics_operational.export') "
+        + "or hasPermission(null, 'analytics_finance.export') "
+        + "or hasPermission(null, 'analytics_cohort.export')"
 )
 public class ExportController {
 
