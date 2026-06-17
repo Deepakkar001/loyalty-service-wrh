@@ -75,4 +75,40 @@ class DashboardServiceTest {
         assertEquals(1, res.topRules().size());
         assertEquals(70.0, res.engagement().activePct(), 0.01);
     }
+
+    @Test
+    void getOverview_withDateRange_aggregatesForSelectedPeriod() {
+        String tenantId = "t1";
+        String programmeUid = "default";
+        LocalDate from = LocalDate.of(2026, 5, 1);
+        LocalDate to = LocalDate.of(2026, 5, 7);
+
+        when(dashboardRepo.hasLedgerActivity(tenantId, programmeUid)).thenReturn(true);
+        when(dashboardRepo.countDistinctActiveCustomers(eq(tenantId), eq(programmeUid), any(), any()))
+            .thenReturn(25L, 20L);
+        when(dashboardRepo.sumPointsByType(eq(tenantId), eq(programmeUid), eq("CREDIT"), any(), any()))
+            .thenReturn(new BigDecimal("5000"), new BigDecimal("4000"));
+        when(dashboardRepo.sumPointsByType(eq(tenantId), eq(programmeUid), eq("DEBIT"), any(), any()))
+            .thenReturn(new BigDecimal("1200"), new BigDecimal("1000"));
+        when(dashboardRepo.avgSuccessfulEventAmount(eq(tenantId), any(), any()))
+            .thenReturn(Optional.of(new BigDecimal("450")), Optional.of(new BigDecimal("420")));
+        when(dashboardRepo.getDailyVolumeSeries(eq(tenantId), eq(programmeUid), eq(from), eq(to)))
+            .thenReturn(List.of(new DashboardVolumePoint("2026-05-01", new BigDecimal("100"), new BigDecimal("20"))));
+        when(dashboardRepo.getTopRules(eq(tenantId), eq(programmeUid), eq(from), eq(to), anyInt()))
+            .thenReturn(List.of());
+        when(dashboardRepo.getTopRedemptions(eq(tenantId), eq(programmeUid), eq(from), eq(to), anyInt()))
+            .thenReturn(List.of());
+        when(analyticsRepo.getEngagementSegmentsAsOf(eq(tenantId), eq(programmeUid), any(LocalDate.class)))
+            .thenReturn(List.of());
+        when(analyticsRepo.getTierDistributionForActiveInRange(
+            eq(tenantId), eq(programmeUid), eq(from), eq(to)
+        )).thenReturn(List.of());
+        when(analyticsRepo.getRetentionCohort(tenantId, programmeUid)).thenReturn(List.of());
+
+        DashboardOverviewResponse res = service.getOverview(tenantId, programmeUid, from, to);
+
+        assertEquals(0, new BigDecimal("5000").compareTo(res.pointsIssuedToday().value()));
+        assertEquals(0, new BigDecimal("1200").compareTo(res.redemptionsToday().value()));
+        assertEquals(25L, res.activeMembers().value().longValue());
+    }
 }

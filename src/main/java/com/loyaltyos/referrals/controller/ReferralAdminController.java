@@ -122,9 +122,15 @@ public class ReferralAdminController {
     @GetMapping("/dashboard")
     public ResponseEntity<ReferralDashboardResponse> dashboard(
         @AuthenticationPrincipal Jwt jwt,
-        @RequestParam(defaultValue = "default") String programmeUid
+        @RequestParam(defaultValue = "default") String programmeUid,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
+        if (fromDate != null || toDate != null) {
+            validateDateRange(fromDate, toDate);
+            return ResponseEntity.ok(analyticsService.dashboardForPeriod(tenantId, programmeUid, fromDate, toDate));
+        }
         return ResponseEntity.ok(adminService.dashboard(tenantId, programmeUid));
     }
 
@@ -191,9 +197,15 @@ public class ReferralAdminController {
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam(defaultValue = "default") String programmeUid,
         @RequestParam(defaultValue = "DAILY") String granularity,
-        @RequestParam(defaultValue = "30") int days
+        @RequestParam(defaultValue = "30") int days,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
+        if (fromDate != null || toDate != null) {
+            validateDateRange(fromDate, toDate);
+            return ResponseEntity.ok(analyticsService.trendsForPeriod(tenantId, programmeUid, fromDate, toDate));
+        }
         return ResponseEntity.ok(analyticsService.trends(tenantId, programmeUid, granularity, days));
     }
 
@@ -201,9 +213,17 @@ public class ReferralAdminController {
     public ResponseEntity<List<ReferralTopReferrerResponse>> topReferrers(
         @AuthenticationPrincipal Jwt jwt,
         @RequestParam(defaultValue = "default") String programmeUid,
-        @RequestParam(defaultValue = "10") int limit
+        @RequestParam(defaultValue = "10") int limit,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
     ) {
         String tenantId = TenantJwt.tenantId(jwt);
+        if (fromDate != null || toDate != null) {
+            validateDateRange(fromDate, toDate);
+            return ResponseEntity.ok(
+                analyticsService.topReferrersForPeriod(tenantId, programmeUid, fromDate, toDate, limit)
+            );
+        }
         return ResponseEntity.ok(analyticsService.topReferrers(tenantId, programmeUid, limit));
     }
 
@@ -261,5 +281,21 @@ public class ReferralAdminController {
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=referrals-export.csv")
             .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
             .body(bytes);
+    }
+
+    private static void validateDateRange(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate == null || toDate == null) {
+            throw new IllegalArgumentException("fromDate and toDate must both be provided");
+        }
+        if (fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("fromDate must be on or before toDate");
+        }
+        long days = java.time.temporal.ChronoUnit.DAYS.between(fromDate, toDate) + 1;
+        if (days > 366) {
+            throw new IllegalArgumentException("Date range cannot exceed 366 days");
+        }
+        if (toDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("toDate cannot be in the future");
+        }
     }
 }

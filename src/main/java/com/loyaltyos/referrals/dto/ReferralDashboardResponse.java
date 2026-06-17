@@ -12,6 +12,10 @@ public class ReferralDashboardResponse {
     /** Percentage of referrals that reached REWARDED (0–100). */
     private double conversionRatePercent;
     private BigDecimal averagePointsPerReferral = BigDecimal.ZERO;
+    private Double totalReferralsTrendPct;
+    private Double rewardedTrendPct;
+    private Double conversionTrendPct;
+    private Double totalPointsTrendPct;
 
     public long getTotalReferrals() {
         return totalReferrals;
@@ -67,5 +71,37 @@ public class ReferralDashboardResponse {
 
     public void setAveragePointsPerReferral(BigDecimal averagePointsPerReferral) {
         this.averagePointsPerReferral = averagePointsPerReferral;
+    }
+
+    public Double getTotalReferralsTrendPct() {
+        return totalReferralsTrendPct;
+    }
+
+    public void setTotalReferralsTrendPct(Double totalReferralsTrendPct) {
+        this.totalReferralsTrendPct = totalReferralsTrendPct;
+    }
+
+    public Double getRewardedTrendPct() {
+        return rewardedTrendPct;
+    }
+
+    public void setRewardedTrendPct(Double rewardedTrendPct) {
+        this.rewardedTrendPct = rewardedTrendPct;
+    }
+
+    public Double getConversionTrendPct() {
+        return conversionTrendPct;
+    }
+
+    public void setConversionTrendPct(Double conversionTrendPct) {
+        this.conversionTrendPct = conversionTrendPct;
+    }
+
+    public Double getTotalPointsTrendPct() {
+        return totalPointsTrendPct;
+    }
+
+    public void setTotalPointsTrendPct(Double totalPointsTrendPct) {
+        this.totalPointsTrendPct = totalPointsTrendPct;
     }
 }

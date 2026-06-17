@@ -1,6 +1,7 @@
 package com.loyaltyos.referrals.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.loyaltyos.referrals.dto.ReferralDashboardResponse;
 import com.loyaltyos.referrals.dto.ReferralEffectivenessReportResponse;
 import com.loyaltyos.referrals.dto.ReferralEffectivenessTrendRow;
 import com.loyaltyos.referrals.dto.ReferralFunnelStageRow;
@@ -138,6 +139,90 @@ public class ReferralAnalyticsService {
         return BigDecimal.valueOf(current - prior)
             .multiply(new BigDecimal("100"))
             .divide(BigDecimal.valueOf(prior), 1, RoundingMode.HALF_UP);
+    }
+
+    @Transactional(readOnly = true)
+    public ReferralDashboardResponse dashboardForPeriod(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        String programme = normalize(programmeUid);
+        long periodDays = ChronoUnit.DAYS.between(from, to) + 1;
+        LocalDate priorFrom = from.minusDays(periodDays);
+        LocalDate priorTo = from.minusDays(1);
+
+        ReferralPeriodMetrics period = analyticsQueryRepository.getPeriodMetrics(tenantId, programme, from, to);
+        ReferralPeriodMetrics prior = analyticsQueryRepository.getPeriodMetrics(tenantId, programme, priorFrom, priorTo);
+
+        ReferralDashboardResponse response = new ReferralDashboardResponse();
+        response.setTotalReferrals(period.totalReferrals());
+        response.setSignedUp(period.signedUp());
+        response.setRewarded(period.rewarded());
+        response.setFraudFlagged(period.fraudFlagged());
+        response.setTotalPointsIssued(period.totalRewardPoints());
+        if (period.totalReferrals() > 0) {
+            response.setConversionRatePercent(period.conversionRatePercent().doubleValue());
+            response.setAveragePointsPerReferral(
+                period.totalRewardPoints()
+                    .divide(BigDecimal.valueOf(period.totalReferrals()), 2, RoundingMode.HALF_UP)
+            );
+        }
+        response.setTotalReferralsTrendPct(percentChangeDouble(period.totalReferrals(), prior.totalReferrals()));
+        response.setRewardedTrendPct(percentChangeDouble(period.rewarded(), prior.rewarded()));
+        response.setConversionTrendPct(
+            percentChangeDouble(
+                period.conversionRatePercent().doubleValue(),
+                prior.conversionRatePercent().doubleValue()
+            )
+        );
+        response.setTotalPointsTrendPct(
+            percentChangeDouble(
+                period.totalRewardPoints().doubleValue(),
+                prior.totalRewardPoints().doubleValue()
+            )
+        );
+        return response;
+    }
+
+    private static Double percentChangeDouble(double current, double prior) {
+        if (prior == 0.0) {
+            return current > 0 ? 100.0 : 0.0;
+        }
+        return Math.round(((current - prior) * 100.0 / prior) * 10.0) / 10.0;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReferralTrendPointResponse> trendsForPeriod(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        String programme = normalize(programmeUid);
+        return analyticsQueryRepository.getDailyTrends(tenantId, programme, from, to).stream()
+            .map(row -> {
+                ReferralTrendPointResponse point = new ReferralTrendPointResponse();
+                point.setPeriodStart(row.getPeriodStart());
+                point.setReferrals(row.getReferrals());
+                point.setRewarded(row.getRewarded());
+                return point;
+            })
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReferralTopReferrerResponse> topReferrersForPeriod(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to,
+        int limit
+    ) {
+        String programme = normalize(programmeUid);
+        int top = Math.min(Math.max(limit, 1), 50);
+        return analyticsQueryRepository.getTopReferrersInPeriod(tenantId, programme, from, to, top);
     }
 
     @Transactional(readOnly = true)

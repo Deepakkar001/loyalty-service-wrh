@@ -204,6 +204,102 @@ public class AnalyticsQueryRepository {
         return jdbc.query(sql, params, this::mapSegmentRow);
     }
 
+    public List<SegmentAnalysisRow> getEngagementSegmentsAsOf(
+        String tenantId,
+        String programmeUid,
+        LocalDate asOfDate
+    ) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("asOfDay", asOfDate)
+            .addValue("asOfEnd", asOfDate.plusDays(1).atStartOfDay());
+        String ledgerProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
+        String cbcProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("cbc.programme_uid");
+        String sql = """
+            SELECT segment,
+                   COUNT(*) AS member_count,
+                   ROUND(AVG(balance), 2) AS avg_balance,
+                   ROUND(SUM(balance), 2) AS total_points_held
+            FROM (
+              SELECT
+                cbc.customer_id,
+                cbc.balance,
+                CASE
+                  WHEN DATEDIFF(:asOfDay, DATE(COALESCE(last_txn.last_txn_date, '1970-01-01'))) <= 30 THEN 'ACTIVE'
+                  WHEN DATEDIFF(:asOfDay, DATE(COALESCE(last_txn.last_txn_date, '1970-01-01'))) <= 90 THEN 'AT_RISK'
+                  ELSE 'DORMANT'
+                END AS segment
+              FROM customer_balance_cache cbc
+              LEFT JOIN (
+                SELECT customer_id, MAX(created_at) AS last_txn_date
+                FROM points_ledger
+                WHERE tenant_id = :tenantId
+                  AND %s
+                  AND created_at < :asOfEnd
+                GROUP BY customer_id
+              ) last_txn ON last_txn.customer_id = cbc.customer_id
+              WHERE cbc.tenant_id = :tenantId AND %s
+            ) seg
+            GROUP BY segment
+            ORDER BY FIELD(segment, 'ACTIVE', 'AT_RISK', 'DORMANT')
+            """.formatted(ledgerProgramme, cbcProgramme);
+        return jdbc.query(sql, params, this::mapSegmentRow);
+    }
+
+    public List<TierDistributionRow> getTierDistributionForActiveInRange(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        var params = tenantProgrammeParams(tenantId, programmeUid)
+            .addValue("fromDate", from.atStartOfDay())
+            .addValue("toDate", to.plusDays(1).atStartOfDay());
+        String tdScope = AnalyticsProgrammeSql.programmeScope("td");
+        String td2Scope = AnalyticsProgrammeSql.programmeScope("td2");
+        String cbcTenantJoin = AnalyticsProgrammeSql.tenantColumnEquals("cbc.tenant_id", "td.tenant_id");
+        String cbcProgrammeJoin = AnalyticsProgrammeSql.programmeColumnEqualsColumn("cbc.programme_uid", "td.programme_uid");
+        String ledgerProgramme = AnalyticsProgrammeSql.programmeColumnEqualsParam("programme_uid");
+        String sql = """
+            SELECT
+              td.name AS tier_name,
+              td.rank_order,
+              COUNT(DISTINCT cbc.customer_id) AS member_count,
+              td.entry_threshold,
+              td.points_multiplier
+            FROM tier_definitions td
+            INNER JOIN customer_balance_cache cbc
+                    ON %s
+                   AND %s
+                   AND cbc.balance >= td.entry_threshold
+                   AND cbc.balance < COALESCE(
+                         (SELECT MIN(td2.entry_threshold)
+                          FROM tier_definitions td2
+                          WHERE td2.tenant_id = td.tenant_id
+                            AND %s
+                            AND td2.rank_order > td.rank_order),
+                         999999999)
+            INNER JOIN (
+              SELECT DISTINCT customer_id
+              FROM points_ledger
+              WHERE tenant_id = :tenantId
+                AND %s
+                AND created_at >= :fromDate
+                AND created_at < :toDate
+            ) active ON active.customer_id = cbc.customer_id
+            WHERE td.tenant_id = :tenantId
+              AND %s
+            GROUP BY td.name, td.rank_order, td.entry_threshold, td.points_multiplier
+            ORDER BY td.rank_order ASC
+            """.formatted(cbcTenantJoin, cbcProgrammeJoin, td2Scope, ledgerProgramme, tdScope);
+        return jdbc.query(sql, params, (rs, i) -> new TierDistributionRow(
+            rs.getString("tier_name"),
+            rs.getInt("rank_order"),
+            rs.getLong("member_count"),
+            rs.getBigDecimal("entry_threshold"),
+            rs.getBigDecimal("points_multiplier")
+        ));
+    }
+
     public List<SegmentAnalysisRow> getBalanceBrackets(String tenantId, String programmeUid) {
         var params = tenantProgrammeParams(tenantId, programmeUid);
         String tdScope = AnalyticsProgrammeSql.programmeScope("tier_definitions");

@@ -17,6 +17,8 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -33,6 +35,8 @@ public class DashboardService {
     private static final long CACHE_TTL_MS = 45_000L;
     private static final int MAX_CACHE_ENTRIES = 512;
 
+    private static final int MAX_RANGE_DAYS = 366;
+
     private final DashboardQueryRepository dashboardQueryRepository;
     private final AnalyticsQueryRepository analyticsQueryRepository;
     private final ConcurrentHashMap<String, CachedOverview> cache = new ConcurrentHashMap<>();
@@ -47,20 +51,145 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardOverviewResponse getOverview(String tenantId, String programmeUid) {
+        return getOverview(tenantId, programmeUid, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public DashboardOverviewResponse getOverview(
+        String tenantId,
+        String programmeUid,
+        LocalDate fromDate,
+        LocalDate toDate
+    ) {
         String normalizedProgramme = normalizeProgramme(programmeUid);
-        String cacheKey = tenantId + ":" + normalizedProgramme;
+        boolean ranged = fromDate != null && toDate != null;
+        if (ranged) {
+            validateDateRange(fromDate, toDate);
+        }
+        String cacheKey = tenantId + ":" + normalizedProgramme + ":" + (ranged ? fromDate + ":" + toDate : "default");
         long now = System.currentTimeMillis();
         CachedOverview hit = cache.get(cacheKey);
         if (hit != null && hit.expiresAtMs > now) {
             return hit.response;
         }
 
-        DashboardOverviewResponse response = buildOverview(tenantId, normalizedProgramme);
+        DashboardOverviewResponse response = ranged
+            ? buildOverviewForRange(tenantId, normalizedProgramme, fromDate, toDate)
+            : buildOverview(tenantId, normalizedProgramme);
         if (cache.size() > MAX_CACHE_ENTRIES) {
             cache.clear();
         }
         cache.put(cacheKey, new CachedOverview(response, now + CACHE_TTL_MS));
         return response;
+    }
+
+    private static void validateDateRange(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("fromDate must be on or before toDate");
+        }
+        long days = ChronoUnit.DAYS.between(fromDate, toDate) + 1;
+        if (days > MAX_RANGE_DAYS) {
+            throw new IllegalArgumentException("Date range cannot exceed " + MAX_RANGE_DAYS + " days");
+        }
+        if (toDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("toDate cannot be in the future");
+        }
+    }
+
+    private DashboardOverviewResponse buildOverviewForRange(
+        String tenantId,
+        String programmeUid,
+        LocalDate from,
+        LocalDate to
+    ) {
+        LocalDateTime rangeStart = from.atStartOfDay();
+        LocalDateTime rangeEnd = to.plusDays(1).atStartOfDay();
+        long rangeDays = ChronoUnit.DAYS.between(from, to) + 1;
+        LocalDate priorFrom = from.minusDays(rangeDays);
+        LocalDate priorTo = from.minusDays(1);
+        LocalDateTime priorStart = priorFrom.atStartOfDay();
+        LocalDateTime priorEnd = rangeStart;
+
+        boolean hasData = dashboardQueryRepository.hasLedgerActivity(tenantId, programmeUid);
+
+        long activeMembersInRange = dashboardQueryRepository.countDistinctActiveCustomers(
+            tenantId, programmeUid, rangeStart, rangeEnd
+        );
+        long activeMembersPriorRange = dashboardQueryRepository.countDistinctActiveCustomers(
+            tenantId, programmeUid, priorStart, priorEnd
+        );
+
+        BigDecimal pointsIssued = dashboardQueryRepository.sumPointsByType(
+            tenantId, programmeUid, "CREDIT", rangeStart, rangeEnd
+        );
+        BigDecimal pointsIssuedPrior = dashboardQueryRepository.sumPointsByType(
+            tenantId, programmeUid, "CREDIT", priorStart, priorEnd
+        );
+
+        BigDecimal redemptions = dashboardQueryRepository.sumPointsByType(
+            tenantId, programmeUid, "DEBIT", rangeStart, rangeEnd
+        );
+        BigDecimal redemptionsPrior = dashboardQueryRepository.sumPointsByType(
+            tenantId, programmeUid, "DEBIT", priorStart, priorEnd
+        );
+
+        BigDecimal avgOrderValue = dashboardQueryRepository
+            .avgSuccessfulEventAmount(tenantId, rangeStart, rangeEnd)
+            .orElse(BigDecimal.ZERO);
+        BigDecimal avgOrderValuePrior = dashboardQueryRepository
+            .avgSuccessfulEventAmount(tenantId, priorStart, priorEnd)
+            .orElse(BigDecimal.ZERO);
+
+        List<SegmentAnalysisRow> segments = analyticsQueryRepository.getEngagementSegmentsAsOf(
+            tenantId, programmeUid, to
+        );
+        List<SegmentAnalysisRow> priorSegments = analyticsQueryRepository.getEngagementSegmentsAsOf(
+            tenantId, programmeUid, priorTo
+        );
+        double atRiskPct = computeAtRiskPct(segments);
+        double atRiskPriorPct = computeAtRiskPct(priorSegments);
+
+        List<DashboardVolumePoint> volumeSeries = dashboardQueryRepository.getDailyVolumeSeries(
+            tenantId, programmeUid, from, to
+        );
+        List<TierDistributionRow> tierDistribution = analyticsQueryRepository.getTierDistributionForActiveInRange(
+            tenantId, programmeUid, from, to
+        );
+        List<DashboardTopRuleRow> topRules = dashboardQueryRepository.getTopRules(
+            tenantId, programmeUid, from, to, TOP_RULES_LIMIT
+        );
+        var topRedemptions = dashboardQueryRepository.getTopRedemptions(
+            tenantId, programmeUid, from, to, TOP_REDEMPTIONS_LIMIT
+        );
+
+        DashboardPointsEconomics economics = new DashboardPointsEconomics(
+            pointsIssued,
+            redemptions,
+            pointsIssued.subtract(redemptions),
+            burnRatePct(pointsIssued, redemptions)
+        );
+
+        return new DashboardOverviewResponse(
+            programmeUid,
+            hasData,
+            kpi(activeMembersInRange, trendPct(activeMembersInRange, activeMembersPriorRange)),
+            kpi(pointsIssued, trendPct(pointsIssued, pointsIssuedPrior)),
+            kpi(redemptions, trendPct(redemptions, redemptionsPrior)),
+            kpi(avgOrderValue, trendPct(avgOrderValue, avgOrderValuePrior)),
+            kpi(atRiskPct, trendPct(atRiskPct, atRiskPriorPct)),
+            volumeSeries,
+            tierDistribution,
+            topRules,
+            topRedemptions,
+            new DashboardEngagementSummary(computeActivePct(segments), segments),
+            summarizeRetentionForRange(
+                analyticsQueryRepository.getRetentionCohort(tenantId, programmeUid),
+                from,
+                to
+            ),
+            economics,
+            Instant.now()
+        );
     }
 
     private DashboardOverviewResponse buildOverview(String tenantId, String programmeUid) {
@@ -169,6 +298,40 @@ public class DashboardService {
                 .orElse(rows.get(rows.size() - 1));
         }
         return new DashboardRetentionSummary(latest.retentionPct(), latest.cohortMonth());
+    }
+
+    private static DashboardRetentionSummary summarizeRetentionForRange(
+        List<CohortRetentionRow> rows,
+        LocalDate from,
+        LocalDate to
+    ) {
+        if (rows == null || rows.isEmpty()) {
+            return new DashboardRetentionSummary(null, null);
+        }
+        YearMonth fromMonth = YearMonth.from(from);
+        YearMonth toMonth = YearMonth.from(to);
+        List<CohortRetentionRow> monthOne = rows.stream()
+            .filter(r -> r.monthsSinceJoin() == 1)
+            .filter(r -> {
+                YearMonth cohort = YearMonth.parse(r.cohortMonth());
+                return !cohort.isBefore(fromMonth) && !cohort.isAfter(toMonth);
+            })
+            .toList();
+        if (monthOne.isEmpty()) {
+            return new DashboardRetentionSummary(null, null);
+        }
+        long totalSize = monthOne.stream().mapToLong(CohortRetentionRow::cohortSize).sum();
+        if (totalSize == 0) {
+            return new DashboardRetentionSummary(null, null);
+        }
+        double weighted = monthOne.stream()
+            .mapToDouble(r -> r.retentionPct() * r.cohortSize())
+            .sum();
+        double pct = round1(weighted / totalSize);
+        String label = monthOne.size() == 1
+            ? monthOne.get(0).cohortMonth()
+            : fromMonth + " – " + toMonth;
+        return new DashboardRetentionSummary(pct, label);
     }
 
     private static double computeActivePct(List<SegmentAnalysisRow> segments) {
