@@ -241,7 +241,8 @@ public class RuleEvaluationService {
                 request.getEventType(),
                 request.getAmount(),
                 request.getChannel(),
-                null
+                null,
+                request.getMerchantId()
             );
 
             List<MatchOutcome> outcomes = new ArrayList<>();

@@ -5,7 +5,10 @@ import com.loyaltyos.onboarding.dto.ChangePasswordRequest;
 import com.loyaltyos.onboarding.dto.LoginRequest;
 import com.loyaltyos.onboarding.dto.LoginResponse;
 import com.loyaltyos.onboarding.security.JwtProperties;
+import com.loyaltyos.onboarding.dto.UnifiedSignInRequest;
+import com.loyaltyos.onboarding.dto.UnifiedSignInResponse;
 import com.loyaltyos.onboarding.service.TenantAuthService;
+import com.loyaltyos.onboarding.service.UnifiedAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -27,10 +30,16 @@ import jakarta.servlet.http.HttpServletRequest;
 public class AuthController {
 
     private final TenantAuthService authService;
+    private final UnifiedAuthService unifiedAuthService;
     private final JwtProperties jwtProperties;
 
-    public AuthController(TenantAuthService authService, JwtProperties jwtProperties) {
+    public AuthController(
+        TenantAuthService authService,
+        UnifiedAuthService unifiedAuthService,
+        JwtProperties jwtProperties
+    ) {
         this.authService = Objects.requireNonNull(authService, "authService");
+        this.unifiedAuthService = Objects.requireNonNull(unifiedAuthService, "unifiedAuthService");
         this.jwtProperties = Objects.requireNonNull(jwtProperties, "jwtProperties");
     }
 
@@ -42,6 +51,19 @@ public class AuthController {
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
             .body(result.response());
+    }
+
+    @PostMapping("/sign-in")
+    @Operation(summary = "Unified sign-in",
+        description = "Sign in with email and password. Routes to tenant admin or merchant partner automatically.")
+    public ResponseEntity<UnifiedSignInResponse> signIn(@Valid @RequestBody UnifiedSignInRequest request) {
+        var result = unifiedAuthService.signIn(request);
+        if (result.refreshToken() != null) {
+            return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(result.refreshToken()))
+                .body(result.response());
+        }
+        return ResponseEntity.ok(result.response());
     }
 
     @PostMapping("/refresh")

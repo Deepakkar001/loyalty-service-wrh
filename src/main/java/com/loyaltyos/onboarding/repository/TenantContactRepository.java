@@ -13,5 +13,7 @@ public interface TenantContactRepository extends JpaRepository<TenantContact, Lo
     List<TenantContact> findByTenantId(String tenantId);
     Optional<TenantContact> findByTenantIdAndRole(String tenantId, ContactRole role);
     void deleteByTenantId(String tenantId);
+
+    boolean existsByTenantIdAndEmailIgnoreCase(String tenantId, String email);
 }
 

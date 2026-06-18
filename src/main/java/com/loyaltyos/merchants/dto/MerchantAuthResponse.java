@@ -9,6 +9,7 @@ public class MerchantAuthResponse {
     private String merchantName;
     private String tenantId;
     private String role = "MERCHANT";
+    private boolean mustChangePassword;
 
     public String getAccessToken() { return accessToken; }
     public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
@@ -30,4 +31,7 @@ public class MerchantAuthResponse {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public boolean isMustChangePassword() { return mustChangePassword; }
+    public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
 }

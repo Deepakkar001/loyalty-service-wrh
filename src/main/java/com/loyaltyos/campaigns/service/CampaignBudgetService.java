@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.service;
 
 import com.loyaltyos.campaigns.model.BudgetDecrementResult;
+import com.loyaltyos.merchants.service.MerchantBudgetAlertService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
@@ -41,10 +42,17 @@ public class CampaignBudgetService {
 
     private final JdbcTemplate jdbcTemplate;
     private final CampaignBudgetAlertNotifier alertNotifier;
+    private final MerchantBudgetAlertService merchantBudgetAlertService;
 
-    public CampaignBudgetService(JdbcTemplate jdbcTemplate, CampaignBudgetAlertNotifier alertNotifier) {
+    public CampaignBudgetService(
+        JdbcTemplate jdbcTemplate,
+        CampaignBudgetAlertNotifier alertNotifier,
+        MerchantBudgetAlertService merchantBudgetAlertService
+    ) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate");
         this.alertNotifier = Objects.requireNonNull(alertNotifier, "alertNotifier");
+        this.merchantBudgetAlertService = Objects.requireNonNull(
+            merchantBudgetAlertService, "merchantBudgetAlertService");
     }
 
     /**
@@ -95,6 +103,13 @@ public class CampaignBudgetService {
                     alertNotifier.notifyBudgetAlert(
                         tenantId,
                         programmeUid,
+                        campaignUid,
+                        consumed,
+                        total,
+                        alertPct
+                    );
+                    merchantBudgetAlertService.tryNotifyMerchantBudgetAlert(
+                        tenantId,
                         campaignUid,
                         consumed,
                         total,

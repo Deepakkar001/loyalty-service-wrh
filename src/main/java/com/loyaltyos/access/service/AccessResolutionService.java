@@ -209,6 +209,9 @@ public class AccessResolutionService {
         if (entitledModules.contains("loyalty_rules")) {
             guards.add(new RouteGuardDto("/dashboard/loyalty-rules/create", "loyalty_rules.create"));
         }
+        if (entitledModules.contains("merchants")) {
+            guards.add(new RouteGuardDto("/dashboard/configure/merchants", "merchants.view"));
+        }
     }
 
     private static String stripRouteQuery(String routePath) {

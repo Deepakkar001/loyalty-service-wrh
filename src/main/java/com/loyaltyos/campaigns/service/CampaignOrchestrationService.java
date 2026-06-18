@@ -624,7 +624,8 @@ public class CampaignOrchestrationService {
             request.getEventType().trim(),
             request.getAmount(),
             channel,
-            country
+            country,
+            metadataString(request, "merchantId")
         );
     }
 

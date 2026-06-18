@@ -3,6 +3,7 @@ package com.loyaltyos.onboarding.config;
 import com.loyaltyos.access.security.MustChangePasswordFilter;
 import com.loyaltyos.access.security.TenantModuleAccessFilter;
 import com.loyaltyos.access.security.TenantSessionVersionFilter;
+import com.loyaltyos.merchants.security.MerchantMustChangePasswordFilter;
 import com.loyaltyos.onboarding.security.ApiKeyAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,17 +37,20 @@ public class SecurityConfig {
     private final TenantModuleAccessFilter tenantModuleAccessFilter;
     private final TenantSessionVersionFilter tenantSessionVersionFilter;
     private final MustChangePasswordFilter mustChangePasswordFilter;
+    private final MerchantMustChangePasswordFilter merchantMustChangePasswordFilter;
 
     public SecurityConfig(
         ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
         TenantModuleAccessFilter tenantModuleAccessFilter,
         TenantSessionVersionFilter tenantSessionVersionFilter,
-        MustChangePasswordFilter mustChangePasswordFilter
+        MustChangePasswordFilter mustChangePasswordFilter,
+        MerchantMustChangePasswordFilter merchantMustChangePasswordFilter
     ) {
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
         this.tenantModuleAccessFilter = tenantModuleAccessFilter;
         this.tenantSessionVersionFilter = tenantSessionVersionFilter;
         this.mustChangePasswordFilter = mustChangePasswordFilter;
+        this.merchantMustChangePasswordFilter = merchantMustChangePasswordFilter;
     }
 
     @Bean
@@ -79,13 +83,16 @@ public class SecurityConfig {
             .addFilterAfter(tenantModuleAccessFilter, org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
             .addFilterAfter(tenantSessionVersionFilter, TenantModuleAccessFilter.class)
             .addFilterAfter(mustChangePasswordFilter, TenantSessionVersionFilter.class)
+            .addFilterAfter(merchantMustChangePasswordFilter, MustChangePasswordFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/v1/auth/login",
+                    "/api/v1/auth/sign-in",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
                     "/api/v1/auth/accept-invite",
                     "/api/v1/merchant/auth/login",
+                    "/api/v1/merchant/invite/**",
                     "/api/v1/admin/auth/login",
                     "/api/v1/onboarding/register",
                     "/api/v1/onboarding/metadata",

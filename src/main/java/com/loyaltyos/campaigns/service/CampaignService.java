@@ -100,7 +100,7 @@ public class CampaignService {
 
         Campaign entity = mapNewEntity(tenantId, programmeUid, campaignUid, req, actorId);
         Campaign saved = campaignRepository.save(entity);
-        return toResponse(saved);
+        return applyOptionalEventSchema(tenantId, campaignUid, req.getEventSchema(), toResponse(saved));
     }
 
     @Transactional
@@ -118,7 +118,7 @@ public class CampaignService {
 
         applyUpsert(existing, req, actorId);
         Campaign saved = campaignRepository.save(existing);
-        return toResponse(saved);
+        return applyOptionalEventSchema(tenantId, campaignUid, req.getEventSchema(), toResponse(saved));
     }
 
     @Transactional(readOnly = true)
@@ -305,14 +305,51 @@ public class CampaignService {
         ObjectNode stored = schema.deepCopy();
         EventSchemaJsonSupport.ensureStandardFieldsUnion(stored);
         c.setEventSchema(stored);
-        String triggerTypes = EventSchemaJsonSupport.triggerTypesFromEventSchema(stored);
-        if (triggerTypes.isBlank()) {
-            throw new CampaignBadRequestException("At least one event type is required in eventSchema");
-        }
-        c.setTriggerEventType(triggerTypes);
-        programmeValidator.validateTriggerEventType(tenantId, c.getProgrammeUid(), triggerTypes);
+        syncTriggerEventTypeFromSchema(c, stored);
+        programmeValidator.validateTriggerEventType(tenantId, c.getProgrammeUid(), c.getTriggerEventType());
         Campaign saved = campaignRepository.save(c);
         return toResponse(saved);
+    }
+
+    /**
+     * When event schema is saved, auto-populate trigger types only if the campaign has none yet.
+     * Preserves merchant/tenant targeting selections that are already stored on the campaign.
+     */
+    private void syncTriggerEventTypeFromSchema(Campaign campaign, ObjectNode schema) {
+        String schemaTypes = EventSchemaJsonSupport.triggerTypesFromEventSchema(schema);
+        if (schemaTypes.isBlank()) {
+            throw new CampaignBadRequestException("At least one event type is required in eventSchema");
+        }
+        String existing = campaign.getTriggerEventType();
+        if (existing == null || existing.isBlank()) {
+            campaign.setTriggerEventType(schemaTypes);
+            return;
+        }
+        for (String part : existing.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            if (!TriggerEventTypes.contains(schemaTypes, token)) {
+                throw new CampaignBadRequestException(
+                    "triggerEventType '" + token + "' is not defined in eventSchema"
+                );
+            }
+        }
+    }
+
+    private CampaignResponse applyOptionalEventSchema(
+        String tenantId,
+        String campaignUid,
+        JsonNode eventSchema,
+        CampaignResponse baseResponse
+    ) {
+        if (eventSchema == null || eventSchema.isNull() || eventSchema.isEmpty()) {
+            return baseResponse;
+        }
+        CampaignEventSchemaUpsertRequest schemaReq = new CampaignEventSchemaUpsertRequest();
+        schemaReq.setEventSchema(eventSchema);
+        return upsertEventSchema(tenantId, campaignUid, schemaReq);
     }
 
     @Transactional
@@ -396,12 +433,8 @@ public class CampaignService {
 
     private CampaignResponse persistEventSchemaDocument(Campaign c, ObjectNode schema) {
         c.setEventSchema(schema);
-        String triggerTypes = EventSchemaJsonSupport.triggerTypesFromEventSchema(schema);
-        if (triggerTypes.isBlank()) {
-            throw new CampaignBadRequestException("At least one event type is required in eventSchema");
-        }
-        c.setTriggerEventType(triggerTypes);
-        programmeValidator.validateTriggerEventType(c.getTenantId(), c.getProgrammeUid(), triggerTypes);
+        syncTriggerEventTypeFromSchema(c, schema);
+        programmeValidator.validateTriggerEventType(c.getTenantId(), c.getProgrammeUid(), c.getTriggerEventType());
         Campaign saved = campaignRepository.save(c);
         return toResponse(saved);
     }

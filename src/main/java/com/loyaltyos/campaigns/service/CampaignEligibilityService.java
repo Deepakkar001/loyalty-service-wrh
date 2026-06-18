@@ -137,6 +137,10 @@ public class CampaignEligibilityService {
         List<DroppedCampaign> dropped = new ArrayList<>();
 
         for (Campaign campaign : campaigns) {
+            if (!matchesMerchantScope(campaign, event)) {
+                dropped.add(dropped(campaign, DropReason.MERCHANT_SCOPE_MISMATCH));
+                continue;
+            }
             if (!matchesCustomerScope(tenantId, campaign, event.customerId())) {
                 dropped.add(dropped(campaign, DropReason.CUSTOMER_NOT_IN_TARGET_LIST));
                 continue;
@@ -157,6 +161,22 @@ public class CampaignEligibilityService {
         }
 
         return new EligibilityResult(qualifying, dropped);
+    }
+
+    /**
+     * Merchant-funded campaigns ({@code merchant_id} set) only qualify when the event carries the same
+     * merchant id. Tenant-wide campaigns ({@code merchant_id} null) are not merchant-scoped.
+     */
+    public static boolean matchesMerchantScope(Campaign campaign, CampaignEventContext event) {
+        String campaignMerchant = campaign.getMerchantId();
+        if (campaignMerchant == null || campaignMerchant.isBlank()) {
+            return true;
+        }
+        String eventMerchant = event.merchantId();
+        if (eventMerchant == null || eventMerchant.isBlank()) {
+            return false;
+        }
+        return campaignMerchant.trim().equals(eventMerchant.trim());
     }
 
     public boolean matchesCustomerScope(String tenantId, Campaign campaign, String customerId) {

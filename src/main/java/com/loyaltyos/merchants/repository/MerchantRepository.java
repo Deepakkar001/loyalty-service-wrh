@@ -12,6 +12,10 @@ public interface MerchantRepository extends JpaRepository<Merchant, Long> {
 
     Optional<Merchant> findByTenantIdAndMerchantUid(String tenantId, String merchantUid);
 
+    List<Merchant> findByTenantIdOrderByCreatedAtDesc(String tenantId);
+
+    List<Merchant> findByOnboardingStage(MerchantOnboardingStage stage);
+
     Page<Merchant> findByTenantIdOrderByCreatedAtDesc(String tenantId, Pageable pageable);
 
     Page<Merchant> findByTenantIdAndOnboardingStageOrderByCreatedAtDesc(
@@ -23,4 +27,12 @@ public interface MerchantRepository extends JpaRepository<Merchant, Long> {
     List<Merchant> findByTenantIdAndOnboardingStage(String tenantId, MerchantOnboardingStage stage);
 
     boolean existsByTenantIdAndMerchantUid(String tenantId, String merchantUid);
+
+    boolean existsByTenantIdAndContactEmailIgnoreCase(String tenantId, String contactEmail);
+
+    boolean existsByTenantIdAndContactEmailIgnoreCaseAndMerchantUidNot(
+        String tenantId,
+        String contactEmail,
+        String merchantUid
+    );
 }

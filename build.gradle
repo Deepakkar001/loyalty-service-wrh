@@ -64,6 +64,10 @@ dependencies {
     // CSV import (voucher inventory batches)
     implementation 'org.apache.commons:commons-csv:1.11.0'
 
+    // Settlement statement exports
+    implementation 'com.github.librepdf:openpdf:1.3.39'
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
     // MapStruct (DTO mapping)
     implementation 'org.mapstruct:mapstruct:1.6.0'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.0'

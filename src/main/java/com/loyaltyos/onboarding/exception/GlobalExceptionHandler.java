@@ -22,6 +22,7 @@ import com.loyaltyos.voucher.exception.VoucherCatalogException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.context.request.ServletWebRequest;
@@ -34,6 +35,21 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex, WebRequest request) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        String error = switch (status) {
+            case CONFLICT -> "CONFLICT";
+            case BAD_REQUEST -> "BAD_REQUEST";
+            case NOT_FOUND -> "NOT_FOUND";
+            case FORBIDDEN -> "FORBIDDEN";
+            case UNAUTHORIZED -> "UNAUTHORIZED";
+            default -> status.name();
+        };
+        String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
+        return buildResponse(status, error, message, request);
+    }
 
     @ExceptionHandler(TenantNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTenantNotFound(

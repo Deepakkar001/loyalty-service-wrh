@@ -76,6 +76,14 @@ public class Merchant {
     @Column(name = "commission_config", columnDefinition = "JSON")
     private String commissionConfig;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "eligible_categories_json", columnDefinition = "JSON")
+    private String eligibleCategoriesJson;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "capabilities_json", columnDefinition = "JSON")
+    private String capabilitiesJson;
+
     @Column(name = "api_credentials_vault_ref")
     private String apiCredentialsVaultRef;
 
@@ -87,6 +95,9 @@ public class Merchant {
 
     @Column(name = "integration_test_passed_at")
     private Instant integrationTestPassedAt;
+
+    @Column(name = "settlement_hold", nullable = false)
+    private boolean settlementHold;
 
     @Column(name = "created_by")
     private String createdBy;
@@ -143,6 +154,14 @@ public class Merchant {
     public String getCommissionConfig() { return commissionConfig; }
     public void setCommissionConfig(String commissionConfig) { this.commissionConfig = commissionConfig; }
 
+    public String getEligibleCategoriesJson() { return eligibleCategoriesJson; }
+    public void setEligibleCategoriesJson(String eligibleCategoriesJson) {
+        this.eligibleCategoriesJson = eligibleCategoriesJson;
+    }
+
+    public String getCapabilitiesJson() { return capabilitiesJson; }
+    public void setCapabilitiesJson(String capabilitiesJson) { this.capabilitiesJson = capabilitiesJson; }
+
     public String getApiCredentialsVaultRef() { return apiCredentialsVaultRef; }
     public void setApiCredentialsVaultRef(String apiCredentialsVaultRef) { this.apiCredentialsVaultRef = apiCredentialsVaultRef; }
 
@@ -156,6 +175,9 @@ public class Merchant {
     public void setIntegrationTestPassedAt(Instant integrationTestPassedAt) {
         this.integrationTestPassedAt = integrationTestPassedAt;
     }
+
+    public boolean isSettlementHold() { return settlementHold; }
+    public void setSettlementHold(boolean settlementHold) { this.settlementHold = settlementHold; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

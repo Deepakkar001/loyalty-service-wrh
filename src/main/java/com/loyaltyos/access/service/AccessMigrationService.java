@@ -1,11 +1,16 @@
 package com.loyaltyos.access.service;
 
 import com.loyaltyos.access.config.AccessProperties;
+import com.loyaltyos.access.entity.AccessNavItem;
+import com.loyaltyos.access.entity.TenantModuleEntitlement;
 import com.loyaltyos.access.enums.EntitlementSource;
+import com.loyaltyos.access.repository.AccessModuleRepository;
 import com.loyaltyos.access.repository.AccessNavItemRepository;
+import com.loyaltyos.access.repository.TenantModuleEntitlementRepository;
 import com.loyaltyos.access.repository.TenantUserRepository;
 import com.loyaltyos.onboarding.entity.TenantOnboarding;
 import com.loyaltyos.onboarding.enums.ContactRole;
+import com.loyaltyos.onboarding.enums.SubscriptionTier;
 import com.loyaltyos.onboarding.repository.TenantContactRepository;
 import com.loyaltyos.onboarding.repository.TenantOnboardingRepository;
 import org.slf4j.Logger;
@@ -28,6 +33,8 @@ public class AccessMigrationService implements ApplicationRunner {
     private final TenantUserRepository userRepository;
     private final AccessProvisioningService provisioningService;
     private final AccessNavItemRepository navItemRepository;
+    private final AccessModuleRepository moduleRepository;
+    private final TenantModuleEntitlementRepository entitlementRepository;
 
     public AccessMigrationService(
         AccessProperties accessProperties,
@@ -35,7 +42,9 @@ public class AccessMigrationService implements ApplicationRunner {
         TenantContactRepository contactRepository,
         TenantUserRepository userRepository,
         AccessProvisioningService provisioningService,
-        AccessNavItemRepository navItemRepository
+        AccessNavItemRepository navItemRepository,
+        AccessModuleRepository moduleRepository,
+        TenantModuleEntitlementRepository entitlementRepository
     ) {
         this.accessProperties = accessProperties;
         this.tenantRepository = tenantRepository;
@@ -43,6 +52,8 @@ public class AccessMigrationService implements ApplicationRunner {
         this.userRepository = userRepository;
         this.provisioningService = provisioningService;
         this.navItemRepository = navItemRepository;
+        this.moduleRepository = moduleRepository;
+        this.entitlementRepository = entitlementRepository;
     }
 
     @Override
@@ -65,6 +76,29 @@ public class AccessMigrationService implements ApplicationRunner {
                     log.info("Updated My Rules nav item to be available during setup progress");
                 }
             });
+        ensureMerchantsNavItem();
+    }
+
+    private void ensureMerchantsNavItem() {
+        boolean hasMerchantsNav = navItemRepository.findAllByOrderBySortOrderAsc().stream()
+            .anyMatch(item -> "merchants".equals(item.getModuleKey())
+                && "/dashboard/configure/merchants".equals(item.getRoutePath()));
+        if (hasMerchantsNav) {
+            return;
+        }
+        if (moduleRepository.findById("merchants").isEmpty()) {
+            return;
+        }
+        AccessNavItem nav = new AccessNavItem();
+        nav.setModuleKey("merchants");
+        nav.setRoutePath("/dashboard/configure/merchants");
+        nav.setLabelKey("Merchants");
+        nav.setSortOrder(50);
+        nav.setRequiredPermissionKey("merchants.view");
+        nav.setRequiresOnboardingComplete(true);
+        nav.setIconKey("Users");
+        navItemRepository.save(nav);
+        log.info("Patched access catalog with merchants nav item");
     }
 
     private void migrateTenantSafe(TenantOnboarding tenant) {
@@ -84,6 +118,8 @@ public class AccessMigrationService implements ApplicationRunner {
 
         if (!provisioningService.hasEntitlements(tenantId)) {
             provisioningService.provisionFullEntitlements(tenantId, EntitlementSource.MIGRATION, "system");
+        } else {
+            ensureMerchantsEntitlementForEnterprise(tenant);
         }
 
         if (!userRepository.existsByTenantId(tenantId)) {
@@ -98,5 +134,34 @@ public class AccessMigrationService implements ApplicationRunner {
         } else {
             provisioningService.syncPrimaryAdminGrants(tenantId);
         }
+    }
+
+    /**
+     * Tenants onboarded before the merchants module shipped may lack the entitlement even on Enterprise tier.
+     * Add it without removing other module selections.
+     */
+    private void ensureMerchantsEntitlementForEnterprise(TenantOnboarding tenant) {
+        if (tenant.getSubscriptionTier() != SubscriptionTier.ENTERPRISE
+            && tenant.getSubscriptionTier() != SubscriptionTier.PROFESSIONAL) {
+            return;
+        }
+        String tenantId = tenant.getTenantId();
+        boolean hasMerchants = entitlementRepository.findByTenantId(tenantId).stream()
+            .anyMatch(e -> "merchants".equals(e.getModuleKey()) && e.isEnabled());
+        if (hasMerchants) {
+            return;
+        }
+        if (moduleRepository.findById("merchants").isEmpty()) {
+            return;
+        }
+        TenantModuleEntitlement ent = new TenantModuleEntitlement();
+        ent.setTenantId(tenantId);
+        ent.setModuleKey("merchants");
+        ent.setEnabled(true);
+        ent.setSource(EntitlementSource.MIGRATION);
+        ent.setEnabledBy("system");
+        entitlementRepository.save(ent);
+        provisioningService.syncPrimaryAdminGrants(tenantId);
+        log.info("Enabled merchants module entitlement for tenant {}", tenantId);
     }
 }

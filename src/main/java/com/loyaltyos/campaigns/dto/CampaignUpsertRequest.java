@@ -72,6 +72,9 @@ public class CampaignUpsertRequest {
     /** ALL (default) or TARGETED — targeted lists are populated via CSV upload. */
     private String customerScope;
 
+    /** Optional campaign event schema (same JSON shape as programme eventSchema). */
+    private com.fasterxml.jackson.databind.JsonNode eventSchema;
+
     public CampaignUpsertRequest() {}
 
     public String getProgrammeUid() { return programmeUid; }
@@ -116,4 +119,6 @@ public class CampaignUpsertRequest {
     public void setValidUntil(Instant validUntil) { this.validUntil = validUntil; }
     public String getCustomerScope() { return customerScope; }
     public void setCustomerScope(String customerScope) { this.customerScope = customerScope; }
+    public com.fasterxml.jackson.databind.JsonNode getEventSchema() { return eventSchema; }
+    public void setEventSchema(com.fasterxml.jackson.databind.JsonNode eventSchema) { this.eventSchema = eventSchema; }
 }

@@ -1,6 +1,7 @@
 package com.loyaltyos.campaigns.service;
 
 import com.loyaltyos.campaigns.model.BudgetDecrementResult;
+import com.loyaltyos.merchants.service.MerchantBudgetAlertService;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,11 +26,14 @@ class CampaignBudgetServiceTest {
     @Mock
     private CampaignBudgetAlertNotifier alertNotifier;
 
+    @Mock
+    private MerchantBudgetAlertService merchantBudgetAlertService;
+
     private CampaignBudgetService budgetService;
 
     @BeforeEach
     void setUp() {
-        budgetService = new CampaignBudgetService(jdbcTemplate, alertNotifier);
+        budgetService = new CampaignBudgetService(jdbcTemplate, alertNotifier, merchantBudgetAlertService);
     }
 
     @Test

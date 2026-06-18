@@ -2,6 +2,7 @@ package com.loyaltyos.merchants.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 public class MerchantResponse {
 
@@ -18,6 +19,8 @@ public class MerchantResponse {
     private boolean active;
     private boolean suspended;
     private Instant createdAt;
+    private String eligibleCategoriesJson;
+    private List<String> capabilities;
 
     public String getMerchantUid() { return merchantUid; }
     public void setMerchantUid(String merchantUid) { this.merchantUid = merchantUid; }
@@ -59,4 +62,12 @@ public class MerchantResponse {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public String getEligibleCategoriesJson() { return eligibleCategoriesJson; }
+    public void setEligibleCategoriesJson(String eligibleCategoriesJson) {
+        this.eligibleCategoriesJson = eligibleCategoriesJson;
+    }
+
+    public List<String> getCapabilities() { return capabilities; }
+    public void setCapabilities(List<String> capabilities) { this.capabilities = capabilities; }
 }

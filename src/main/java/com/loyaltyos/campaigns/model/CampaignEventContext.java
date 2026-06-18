@@ -12,7 +12,8 @@ public record CampaignEventContext(
     String eventType,
     BigDecimal amount,
     String channel,
-    String country
+    String country,
+    String merchantId
 ) {
     public CampaignEventContext {
         Objects.requireNonNull(customerId, "customerId");
@@ -20,5 +21,17 @@ public record CampaignEventContext(
         if (amount == null) {
             amount = BigDecimal.ZERO;
         }
+    }
+
+    /** Backward-compatible constructor without merchant scope. */
+    public CampaignEventContext(
+        String customerId,
+        String customerTierUid,
+        String eventType,
+        BigDecimal amount,
+        String channel,
+        String country
+    ) {
+        this(customerId, customerTierUid, eventType, amount, channel, country, null);
     }
 }

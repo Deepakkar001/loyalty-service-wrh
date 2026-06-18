@@ -206,6 +206,70 @@ class CampaignEligibilityServiceTest {
         ));
     }
 
+    @Test
+    void findQualifying_dropsMerchantFundedWhenEventMerchantMissing() {
+        Campaign merchantCampaign = CampaignTestFixtures.campaign(
+            "m1", "Merchant promo", 1, com.loyaltyos.campaigns.enums.StackMode.ADDITIVE, null,
+            "POINTS_BONUS", new BigDecimal("10"), null, null
+        );
+        merchantCampaign.setMerchantId("merchant-a");
+        merchantCampaign.setTargetSegment(objectMapper.createObjectNode());
+
+        when(campaignRepository.findActiveForEligibility(any(), any(), any(), any()))
+            .thenReturn(List.of(merchantCampaign));
+
+        EligibilityResult result = eligibilityService.findQualifying(
+            "tenant-1",
+            "default",
+            new CampaignEventContext("cust-1", null, "PURCHASE", BigDecimal.TEN, null, null, null)
+        );
+
+        assertTrue(result.qualifying().isEmpty());
+        assertEquals(DropReason.MERCHANT_SCOPE_MISMATCH, result.dropped().getFirst().dropReason());
+    }
+
+    @Test
+    void findQualifying_qualifiesMerchantFundedWhenMerchantMatches() {
+        Campaign merchantCampaign = CampaignTestFixtures.campaign(
+            "m1", "Merchant promo", 1, com.loyaltyos.campaigns.enums.StackMode.ADDITIVE, null,
+            "POINTS_BONUS", new BigDecimal("10"), null, null
+        );
+        merchantCampaign.setMerchantId("merchant-a");
+        merchantCampaign.setTargetSegment(objectMapper.createObjectNode());
+
+        when(campaignRepository.findActiveForEligibility(any(), any(), any(), any()))
+            .thenReturn(List.of(merchantCampaign));
+
+        EligibilityResult result = eligibilityService.findQualifying(
+            "tenant-1",
+            "default",
+            new CampaignEventContext("cust-1", null, "PURCHASE", BigDecimal.TEN, null, null, "merchant-a")
+        );
+
+        assertEquals(1, result.qualifying().size());
+        assertEquals("m1", result.qualifying().getFirst().getCampaignUid());
+    }
+
+    @Test
+    void findQualifying_tenantCampaignIgnoresEventMerchant() {
+        Campaign tenantCampaign = CampaignTestFixtures.campaign(
+            "t1", "Tenant promo", 1, com.loyaltyos.campaigns.enums.StackMode.ADDITIVE, null,
+            "POINTS_BONUS", new BigDecimal("10"), null, null
+        );
+        tenantCampaign.setTargetSegment(objectMapper.createObjectNode());
+
+        when(campaignRepository.findActiveForEligibility(any(), any(), any(), any()))
+            .thenReturn(List.of(tenantCampaign));
+
+        EligibilityResult result = eligibilityService.findQualifying(
+            "tenant-1",
+            "default",
+            new CampaignEventContext("cust-1", null, "PURCHASE", BigDecimal.TEN, null, null, "other-merchant")
+        );
+
+        assertEquals(1, result.qualifying().size());
+    }
+
     private Campaign activeCampaign(String uid, CustomerScope scope) {
         Campaign c = CampaignTestFixtures.campaign(
             uid, "VIP", 1, com.loyaltyos.campaigns.enums.StackMode.ADDITIVE, null,

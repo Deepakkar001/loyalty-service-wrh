@@ -45,6 +45,18 @@ public class MerchantCredentials {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
+    @Column(name = "invite_token_hash", length = 128)
+    private String inviteTokenHash;
+
+    @Column(name = "invite_token_expires_at")
+    private Instant inviteTokenExpiresAt;
+
+    @Column(name = "invite_accepted_at")
+    private Instant inviteAcceptedAt;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -84,6 +96,22 @@ public class MerchantCredentials {
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+
+    public boolean isMustChangePassword() { return mustChangePassword; }
+    public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
+
+    public String getInviteTokenHash() { return inviteTokenHash; }
+    public void setInviteTokenHash(String inviteTokenHash) { this.inviteTokenHash = inviteTokenHash; }
+
+    public Instant getInviteTokenExpiresAt() { return inviteTokenExpiresAt; }
+    public void setInviteTokenExpiresAt(Instant inviteTokenExpiresAt) { this.inviteTokenExpiresAt = inviteTokenExpiresAt; }
+
+    public Instant getInviteAcceptedAt() { return inviteAcceptedAt; }
+    public void setInviteAcceptedAt(Instant inviteAcceptedAt) { this.inviteAcceptedAt = inviteAcceptedAt; }
+
+    public boolean isInvitePending() {
+        return inviteTokenHash != null && inviteAcceptedAt == null;
+    }
 
     public Instant getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(Instant lastLoginAt) { this.lastLoginAt = lastLoginAt; }

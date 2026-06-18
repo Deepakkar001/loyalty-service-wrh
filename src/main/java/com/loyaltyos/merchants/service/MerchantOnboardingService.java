@@ -3,11 +3,12 @@ package com.loyaltyos.merchants.service;
 import com.loyaltyos.merchants.config.MerchantProperties;
 import com.loyaltyos.merchants.dto.CreateMerchantRequest;
 import com.loyaltyos.merchants.dto.MerchantActivateResponse;
+import com.loyaltyos.merchants.dto.MerchantInviteLinkResponse;
+import com.loyaltyos.merchants.dto.MerchantResendInviteResponse;
 import com.loyaltyos.merchants.dto.MerchantResponse;
-import com.loyaltyos.merchants.dto.UpdateMerchantAgreementRequest;
+import com.loyaltyos.merchants.dto.SubmitMerchantAgreementRequest;
 import com.loyaltyos.merchants.dto.UpdateMerchantConfigRequest;
 import com.loyaltyos.merchants.entity.Merchant;
-import com.loyaltyos.merchants.entity.MerchantCredentials;
 import com.loyaltyos.merchants.entity.MerchantOnboardingAudit;
 import com.loyaltyos.merchants.enums.MerchantOnboardingStage;
 import com.loyaltyos.merchants.enums.SettlementCycle;
@@ -37,22 +38,35 @@ public class MerchantOnboardingService {
     private final MerchantRepository merchantRepository;
     private final MerchantOnboardingAuditRepository auditRepository;
     private final MerchantOnboardingStateMachine stateMachine;
-    private final MerchantAuthenticationService merchantAuthenticationService;
     private final MerchantProperties merchantProperties;
+    private final MerchantInviteService merchantInviteService;
+    private final MerchantValidationService merchantValidationService;
+    private final MerchantAgreementService merchantAgreementService;
+    private final MerchantOnboardingEmailGuard onboardingEmailGuard;
+    private final MerchantConfigApprovalService configApprovalService;
 
     public MerchantOnboardingService(
         MerchantRepository merchantRepository,
         MerchantOnboardingAuditRepository auditRepository,
         MerchantOnboardingStateMachine stateMachine,
-        MerchantAuthenticationService merchantAuthenticationService,
-        MerchantProperties merchantProperties
+        MerchantProperties merchantProperties,
+        MerchantInviteService merchantInviteService,
+        MerchantValidationService merchantValidationService,
+        MerchantAgreementService merchantAgreementService,
+        MerchantOnboardingEmailGuard onboardingEmailGuard,
+        MerchantConfigApprovalService configApprovalService
     ) {
         this.merchantRepository = Objects.requireNonNull(merchantRepository, "merchantRepository");
         this.auditRepository = Objects.requireNonNull(auditRepository, "auditRepository");
         this.stateMachine = Objects.requireNonNull(stateMachine, "stateMachine");
-        this.merchantAuthenticationService = Objects.requireNonNull(
-            merchantAuthenticationService, "merchantAuthenticationService");
         this.merchantProperties = Objects.requireNonNull(merchantProperties, "merchantProperties");
+        this.merchantInviteService = Objects.requireNonNull(merchantInviteService, "merchantInviteService");
+        this.merchantValidationService = Objects.requireNonNull(
+            merchantValidationService, "merchantValidationService");
+        this.merchantAgreementService = Objects.requireNonNull(
+            merchantAgreementService, "merchantAgreementService");
+        this.onboardingEmailGuard = Objects.requireNonNull(onboardingEmailGuard, "onboardingEmailGuard");
+        this.configApprovalService = Objects.requireNonNull(configApprovalService, "configApprovalService");
     }
 
     private void assertEnabled() {
@@ -64,13 +78,16 @@ public class MerchantOnboardingService {
     @Transactional
     public MerchantResponse register(String tenantId, CreateMerchantRequest request, String actorEmail) {
         assertEnabled();
+        String contactEmail = MerchantOnboardingEmailGuard.normalize(request.getContactEmail());
+        onboardingEmailGuard.assertPortalEmailAvailable(tenantId, contactEmail, null);
+
         Merchant merchant = new Merchant();
         merchant.setTenantId(tenantId);
         merchant.setMerchantUid(MerchantUidGenerator.generate());
         merchant.setLegalName(request.getLegalName().trim());
         merchant.setDisplayName(blankToNull(request.getDisplayName()));
         merchant.setCategory(request.getCategory().trim());
-        merchant.setContactEmail(request.getContactEmail().trim().toLowerCase());
+        merchant.setContactEmail(contactEmail);
         merchant.setContactPhone(blankToNull(request.getContactPhone()));
         merchant.setBankDetailsVaultRef(blankToNull(request.getBankDetailsVaultRef()));
         merchant.setTaxId(request.getTaxId().trim());
@@ -110,29 +127,48 @@ public class MerchantOnboardingService {
     }
 
     @Transactional
-    public MerchantResponse submitAgreement(
+    public MerchantResponse updateContactEmail(
         String tenantId,
         String merchantUid,
-        UpdateMerchantAgreementRequest request,
+        String contactEmail,
         String actorEmail
     ) {
         assertEnabled();
         Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
-        if (!Boolean.TRUE.equals(request.getAgreementAccepted())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Agreement must be accepted to proceed");
+        if (merchant.getOnboardingStage() == MerchantOnboardingStage.ACTIVE
+            || merchant.getOnboardingStage() == MerchantOnboardingStage.SUSPENDED) {
+            throw new InvalidStateException(
+                "Contact email cannot be changed after the merchant is active",
+                merchant.getOnboardingStage().name(),
+                "CONTACT_UPDATE"
+            );
         }
-        merchant.setAgreementDocumentUrl(request.getAgreementDocumentUrl().trim());
-        merchant.setAgreementAcceptedAt(Instant.now());
-        stateMachine.transition(
-            merchant,
-            MerchantOnboardingStage.AGREEMENT,
-            actorEmail,
-            "AGREEMENT_SUBMITTED",
-            null,
-            Map.of("documentUrl", merchant.getAgreementDocumentUrl())
-        );
+        String normalized = MerchantOnboardingEmailGuard.normalize(contactEmail);
+        onboardingEmailGuard.assertPortalEmailAvailable(tenantId, normalized, merchantUid);
+        merchant.setContactEmail(normalized);
         merchantRepository.save(merchant);
+        recordAudit(
+            merchant,
+            merchant.getOnboardingStage().name(),
+            merchant.getOnboardingStage().name(),
+            actorEmail,
+            "CONTACT_EMAIL_UPDATED",
+            null,
+            Map.of("contactEmail", normalized)
+        );
         return MerchantMapper.toResponse(merchant);
+    }
+
+    @Transactional
+    public MerchantResponse submitAgreement(
+        String tenantId,
+        String merchantUid,
+        SubmitMerchantAgreementRequest request,
+        String actorEmail
+    ) {
+        assertEnabled();
+        merchantAgreementService.submitAgreement(tenantId, merchantUid, request, actorEmail);
+        return MerchantMapper.toResponse(getMerchantOrThrow(tenantId, merchantUid));
     }
 
     @Transactional
@@ -144,6 +180,21 @@ public class MerchantOnboardingService {
     ) {
         assertEnabled();
         Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        if (request.getEarnRateMultiplier() != null) {
+            merchantValidationService.validateEarnRateMultiplier(request.getEarnRateMultiplier());
+        }
+        if (request.getCommissionConfigJson() != null) {
+            merchantValidationService.validateCommissionConfigJson(request.getCommissionConfigJson());
+        }
+        if (request.getEligibleCategoriesJson() != null) {
+            merchantValidationService.validateEligibleCategoriesJson(request.getEligibleCategoriesJson());
+        }
+        if (request.getCapabilitiesJson() != null) {
+            merchantValidationService.validateCapabilitiesJson(request.getCapabilitiesJson());
+        }
+        if (merchantProperties.isMakerCheckerConfigEnabled()) {
+            return configApprovalService.submitConfigForApproval(tenantId, merchantUid, request, actorEmail);
+        }
         applyConfig(merchant, request);
         stateMachine.transition(
             merchant,
@@ -178,6 +229,9 @@ public class MerchantOnboardingService {
     public MerchantActivateResponse activate(String tenantId, String merchantUid, String actorEmail) {
         assertEnabled();
         Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        merchantValidationService.requireContactEmailForActivation(merchant);
+        onboardingEmailGuard.assertPortalEmailAvailable(
+            tenantId, merchant.getContactEmail(), merchant.getMerchantUid());
         if (merchant.getIntegrationTestPassedAt() == null) {
             throw new InvalidStateException(
                 "Integration test must be completed before activation",
@@ -195,19 +249,16 @@ public class MerchantOnboardingService {
         );
         merchantRepository.save(merchant);
 
-        String tempPassword = merchantProperties.getDefaultPortalPasswordPrefix()
-            + "!" + UUID.randomUUID().toString().substring(0, 8);
-        MerchantCredentials creds = merchantAuthenticationService.issueCredentials(
-            tenantId,
-            merchantUid,
-            merchant.getContactEmail(),
-            tempPassword
-        );
+        MerchantInviteService.InviteIssueResult invite = merchantInviteService.issuePortalInvite(merchant);
 
         MerchantActivateResponse response = new MerchantActivateResponse();
         copyResponse(MerchantMapper.toResponse(merchant), response);
-        response.setPortalUsername(creds.getUsername());
-        response.setTemporaryPassword(tempPassword);
+        response.setPortalUsername(invite.credentials().getUsername());
+        response.setInviteEmailSent(invite.emailSent());
+        response.setInviteUrl(invite.inviteUrl());
+        if (invite.expiresAt() != null) {
+            response.setInviteExpiresAt(invite.expiresAt().toString());
+        }
         return response;
     }
 
@@ -215,6 +266,7 @@ public class MerchantOnboardingService {
     public MerchantResponse suspend(String tenantId, String merchantUid, String reason, String actorEmail) {
         assertEnabled();
         Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        merchant.setSettlementHold(true);
         stateMachine.transition(
             merchant,
             MerchantOnboardingStage.SUSPENDED,
@@ -231,6 +283,7 @@ public class MerchantOnboardingService {
     public MerchantResponse unsuspend(String tenantId, String merchantUid, String actorEmail) {
         assertEnabled();
         Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        merchant.setSettlementHold(false);
         stateMachine.transition(
             merchant,
             MerchantOnboardingStage.ACTIVE,
@@ -241,6 +294,54 @@ public class MerchantOnboardingService {
         );
         merchantRepository.save(merchant);
         return MerchantMapper.toResponse(merchant);
+    }
+
+    @Transactional
+    public MerchantResendInviteResponse resendPortalInvite(String tenantId, String merchantUid, String actorEmail) {
+        assertEnabled();
+        Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        MerchantInviteService.InviteIssueResult result = merchantInviteService.resendPortalInvite(merchant);
+        recordAudit(
+            merchant,
+            merchant.getOnboardingStage().name(),
+            merchant.getOnboardingStage().name(),
+            actorEmail,
+            "PORTAL_INVITE_RESENT",
+            null,
+            Map.of("inviteEmailSent", result.emailSent())
+        );
+        MerchantResendInviteResponse response = new MerchantResendInviteResponse();
+        response.setInviteEmailSent(result.emailSent());
+        response.setPortalUsername(result.credentials().getUsername());
+        response.setAlreadyActivated(false);
+        response.setInviteUrl(result.inviteUrl());
+        if (result.expiresAt() != null) {
+            response.setInviteExpiresAt(result.expiresAt().toString());
+        }
+        return response;
+    }
+
+    @Transactional
+    public MerchantInviteLinkResponse issuePortalInviteLink(String tenantId, String merchantUid, String actorEmail) {
+        assertEnabled();
+        Merchant merchant = getMerchantOrThrow(tenantId, merchantUid);
+        MerchantInviteService.InviteIssueResult result = merchantInviteService.issuePortalInviteLink(merchant);
+        recordAudit(
+            merchant,
+            merchant.getOnboardingStage().name(),
+            merchant.getOnboardingStage().name(),
+            actorEmail,
+            "PORTAL_INVITE_LINK_ISSUED",
+            null,
+            null
+        );
+        MerchantInviteLinkResponse response = new MerchantInviteLinkResponse();
+        response.setInviteUrl(result.inviteUrl());
+        response.setPortalUsername(result.credentials().getUsername());
+        if (result.expiresAt() != null) {
+            response.setInviteExpiresAt(result.expiresAt().toString());
+        }
+        return response;
     }
 
     Merchant getMerchantOrThrow(String tenantId, String merchantUid) {
@@ -258,13 +359,23 @@ public class MerchantOnboardingService {
         if (request.getSettlementCycle() != null && !request.getSettlementCycle().isBlank()) {
             merchant.setSettlementCycle(parseSettlementCycle(request.getSettlementCycle()));
         }
+        if (request.getEligibleCategoriesJson() != null) {
+            merchant.setEligibleCategoriesJson(request.getEligibleCategoriesJson());
+        }
+        if (request.getCapabilitiesJson() != null) {
+            merchant.setCapabilitiesJson(request.getCapabilitiesJson());
+        }
     }
 
     private static SettlementCycle parseSettlementCycle(String raw) {
         if (raw == null || raw.isBlank()) {
             return SettlementCycle.MONTHLY;
         }
-        return SettlementCycle.valueOf(raw.trim().toUpperCase());
+        try {
+            return SettlementCycle.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid settlement cycle: " + raw);
+        }
     }
 
     private static String blankToNull(String value) {
